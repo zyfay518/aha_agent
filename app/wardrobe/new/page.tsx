@@ -1,0 +1,32 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { uploadAndAnalyze } from "./actions";
+
+export default async function NewItemPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (!data?.claims?.sub) redirect("/login");
+  const { error } = await searchParams;
+
+  return (
+    <section className="upload-page">
+      <Link className="back-link" href="/wardrobe">← 返回衣橱</Link>
+      <div className="upload-card">
+        <span className="eyebrow">添加单品</span>
+        <h1>上传一件衣物</h1>
+        <p>请使用平铺图或衣架图，一张照片里只放一件单品。</p>
+        {error && <div className="notice error">{error}</div>}
+        <form action={uploadAndAnalyze}>
+          <label className="file-drop">
+            <span className="file-icon">＋</span>
+            <strong>选择 JPG、PNG 或 WebP</strong>
+            <small>最大 4MB，照片越清楚识别越准确</small>
+            <input name="image" type="file" accept="image/jpeg,image/png,image/webp" required />
+          </label>
+          <button className="button primary" type="submit">上传并识别</button>
+        </form>
+      </div>
+    </section>
+  );
+}

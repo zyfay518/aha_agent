@@ -58,7 +58,12 @@
 - 区域：`ap-southeast-1`。
 - API URL：`https://icgsgjbywmbizqkzduve.supabase.co`。
 - 私有 Storage bucket：`wardrobe-private`。
-- Vercel：等待首次 CLI OAuth 后创建项目。
+- Vercel 项目：`aha-agent`。
+- 正式地址：`https://aha-agent.vercel.app`。
+- GitHub 自动部署仓库：`zyfay518/aha_agent`。
+- 视觉识别模型：`gpt-5.4-mini-2026-03-17`，可通过服务端 `OPENAI_VISION_MODEL` 调整。
+- 单图限制：JPG、PNG、WebP，最大 4MB，以兼容 Vercel 请求体限制。
+- OpenAI API Key 仅存在于本地与 Vercel 服务端环境变量，不进入浏览器或版本控制。
 
 所有选择均须在实际实施时验证。发生替换时，在 `PROJECT_LOG.md` 增加架构决策记录。
 
