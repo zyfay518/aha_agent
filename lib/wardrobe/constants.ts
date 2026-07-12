@@ -10,7 +10,7 @@ export const categoryLabels: Record<WardrobeCategory, string> = {
 
 export const subcategories: Record<WardrobeCategory, readonly string[]> = {
   top: ["tshirt", "shirt", "knitwear", "hoodie", "jacket", "other"],
-  bottom: ["trousers", "shorts", "skirt", "other"],
+  bottom: ["trousers", "shorts", "swimwear", "skirt", "other"],
   shoes: ["sneakers", "leather_shoes", "boots", "sandals", "other"],
   bag: ["handbag", "shoulder_bag", "backpack", "other"],
 };
@@ -23,6 +23,7 @@ export const subcategoryLabels: Record<string, string> = {
   jacket: "外套",
   trousers: "长裤",
   shorts: "短裤",
+  swimwear: "泳裤",
   skirt: "半身裙",
   sneakers: "运动鞋",
   leather_shoes: "皮鞋",

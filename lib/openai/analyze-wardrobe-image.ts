@@ -106,8 +106,8 @@ export async function analyzeWardrobeImage(file: File): Promise<WardrobeImageAna
       input: [{
         role: "user",
         content: [
-          { type: "input_text", text: "识别照片中的穿搭单品。一次只允许一个主体单品。不要猜测品牌；不确定时使用 other 或 unknown。item_count=2 表示多件或无法可靠分离。名称使用简洁中文。" },
-          { type: "input_image", image_url: `data:${file.type};base64,${base64}`, detail: "low" },
+          { type: "input_text", text: "识别图片中作为商品主体展示的穿搭单品。商品页面截图中的缩略图、模特示意图、文字、价格和界面元素不计入 item_count；只有主体商品本身包含多个独立单品时才返回 item_count=2。区分普通短裤 shorts 与游泳用泳裤 swimwear；可结合图片文字判断用途。不要猜测品牌，不确定时使用 other 或 unknown。名称使用简洁中文。" },
+          { type: "input_image", image_url: `data:${file.type};base64,${base64}`, detail: "high" },
         ],
       }],
       text: { format: { type: "json_schema", name: "wardrobe_item_analysis", strict: true, schema } },

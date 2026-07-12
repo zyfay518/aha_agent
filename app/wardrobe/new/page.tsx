@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { uploadAndAnalyze } from "./actions";
+import { UploadForm } from "./upload-form";
 
 export default async function NewItemPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const supabase = await createClient();
@@ -17,15 +17,7 @@ export default async function NewItemPage({ searchParams }: { searchParams: Prom
         <h1>上传一件衣物</h1>
         <p>请使用平铺图或衣架图，一张照片里只放一件单品。</p>
         {error && <div className="notice error">{error}</div>}
-        <form action={uploadAndAnalyze}>
-          <label className="file-drop">
-            <span className="file-icon">＋</span>
-            <strong>选择 JPG、PNG 或 WebP</strong>
-            <small>最大 4MB，照片越清楚识别越准确</small>
-            <input name="image" type="file" accept="image/jpeg,image/png,image/webp" required />
-          </label>
-          <button className="button primary" type="submit">上传并识别</button>
-        </form>
+        <UploadForm />
       </div>
     </section>
   );
