@@ -11,6 +11,22 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const wardrobeResourceUri = "ui://aha/wardrobe-v1.html";
+const wardrobeWidget = `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{color-scheme:light dark;font-family:ui-sans-serif,system-ui,sans-serif}body{margin:0;padding:14px;background:transparent;color:CanvasText}.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.head h2{margin:0;font:600 20px Georgia,serif}.count{color:#63735b;font-weight:700}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card{padding:12px;border:1px solid color-mix(in srgb,CanvasText 18%,transparent);border-radius:12px;background:color-mix(in srgb,Canvas 94%,#63735b 6%)}.card strong{display:block;margin-bottom:5px}.meta{font-size:13px;opacity:.68}.empty{padding:28px 12px;text-align:center;opacity:.65}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.summary .card{text-align:center}.summary b{display:block;font-size:22px}.summary span{font-size:12px;opacity:.68}@media(min-width:560px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style></head><body><div id="app" class="empty">正在读取衣橱…</div>
+<script>
+const labels={top:'上装',bottom:'下装',shoes:'鞋履',bag:'包袋'};
+function render(data){const root=document.getElementById('app');if(!data){root.className='empty';root.textContent='还没有衣橱数据';return}
+if(data.counts){root.className='';root.innerHTML='<div class="head"><h2>我的衣橱</h2><span class="count">'+data.total+' 件</span></div><div class="summary">'+Object.entries(data.counts).map(([k,v])=>'<div class="card"><b>'+v+'</b><span>'+labels[k]+'</span></div>').join('')+'</div>';return}
+const items=data.items||[];root.className='';root.innerHTML='<div class="head"><h2>衣橱单品</h2><span class="count">'+items.length+' 件</span></div>'+(items.length?'<div class="grid">'+items.map(x=>'<div class="card"><strong>'+escapeHtml(x.name)+'</strong><div class="meta">'+(labels[x.category]||x.category)+' · '+escapeHtml(x.primary_color)+'</div></div>').join('')+'</div>':'<div class="empty">衣橱还是空的</div>')}
+function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+render(window.openai&&window.openai.toolOutput);
+addEventListener('message',e=>{const m=e.data;if(m&&m.method==='ui/notifications/tool-result')render(m.params&&m.params.structuredContent)});
+</script></body></html>`;
+
 const tools = [
   {
     name: "verify_access",
@@ -40,6 +56,7 @@ const tools = [
     description: "Use this before answering what the user owns or composing outfits from existing wardrobe items.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code"], properties: { access_code: { type: "string" }, category: { type: ["string", "null"], enum: ["top", "bottom", "shoes", "bag", null] }, limit: { type: "integer", minimum: 1, maximum: 50, default: 50 } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+    _meta: { ui: { resourceUri: wardrobeResourceUri }, "openai/outputTemplate": wardrobeResourceUri },
   },
   {
     name: "update_wardrobe_item",
@@ -61,6 +78,7 @@ const tools = [
     description: "Use this when the user asks for wardrobe counts or wants to open the optional visual wardrobe.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code"], properties: { access_code: { type: "string" } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+    _meta: { ui: { resourceUri: wardrobeResourceUri }, "openai/outputTemplate": wardrobeResourceUri },
   },
 ] as const;
 
@@ -102,10 +120,16 @@ export async function POST(request: Request) {
   let body: JsonRpcRequest;
   try { body = await request.json(); } catch { return jsonRpcError(null, -32700, "Parse error", 400); }
 
-  if (body.method === "initialize") return jsonRpc(body.id, { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "aha-wardrobe", version: "0.1.0" } });
+  if (body.method === "initialize") return jsonRpc(body.id, { protocolVersion: "2025-06-18", capabilities: { tools: {}, resources: {} }, serverInfo: { name: "aha-wardrobe", version: "0.1.0" } });
   if (body.method === "notifications/initialized") return new Response(null, { status: 202, headers: corsHeaders });
   if (body.method === "ping") return jsonRpc(body.id, {});
   if (body.method === "tools/list") return jsonRpc(body.id, { tools });
+  if (body.method === "resources/list") return jsonRpc(body.id, { resources: [{ uri: wardrobeResourceUri, name: "Aha wardrobe cards", title: "Aha 衣橱卡片", mimeType: "text/html;profile=mcp-app" }] });
+  if (body.method === "resources/read") {
+    const uri = (body.params as { uri?: string } | undefined)?.uri;
+    if (uri !== wardrobeResourceUri) return jsonRpcError(body.id, -32002, "Resource not found");
+    return jsonRpc(body.id, { contents: [{ uri: wardrobeResourceUri, mimeType: "text/html;profile=mcp-app", text: wardrobeWidget, _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } }, "openai/widgetDescription": "展示当前用户的衣橱概览或单品卡片。" } }] });
+  }
   if (body.method === "tools/call") {
     const name = body.params?.name;
     if (!name) return jsonRpcError(body.id, -32602, "Missing tool name");
