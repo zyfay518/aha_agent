@@ -1,13 +1,13 @@
 # Web API 与 MCP 工具契约
 
-> 版本：0.1  
-> 状态：阶段 0 验收候选
+> 版本：0.2
+> 状态：Skill + 远程 MCP 原型已实现
 
 ## 1. 设计边界
 
 - Web 与 ChatGPT App 调用同一业务服务层。
 - Web API 和 MCP 只是不同传输适配器。
-- 身份来自验证后的 session/access token，不接受可信的请求体 `user_id`。
+- Web 身份来自验证后的 session；Skill MVP 使用高熵访问码换取固定衣橱身份，服务端只保存哈希。
 - 所有写接口支持幂等或明确的重复提交处理。
 - MCP 返回结构化数据，UI 和模型不能自行编造业务记录。
 
@@ -56,50 +56,35 @@ Web 成功响应：
 
 MVP 对外暴露七个业务工具。上传图片的具体传递方式在 Apps SDK 原型验证后确定，业务契约不依赖某种临时 URL 实现。
 
-### `prepare_wardrobe_item`
+### `verify_access`
 
-用途：分析图片并返回待确认候选，不直接正式保存。
+用途：在一次 Agent 会话开始时验证 Aha 访问码。访问码不得出现在助手回复中。
 
 输入：
 
 ```json
-{
-  "image": { "kind": "host_file_or_url", "value": "..." },
-  "idempotency_key": "uuid"
-}
+{ "access_code": "AHA-..." }
 ```
 
 输出：
 
 ```json
 {
-  "upload_id": "uuid",
-  "status": "review",
-  "candidate": {
-    "name": "白色长袖衬衫",
-    "category": "top",
-    "subcategory": "shirt",
-    "primary_color": "white"
-  },
-  "warnings": []
+  "ok": true
 }
 ```
 
 ### `add_wardrobe_item`
 
-用途：确认临时上传并正式保存。
+用途：保存由宿主 Agent 识别、且已经过用户确认的结构化单品。Aha 服务不分析图片。
 
-输入必须含 `upload_id` 和用户确认后的四个字段。重复确认同一 `upload_id` 返回同一个单品，而不是创建副本。
+输入含访问码、幂等键、名称、分类、二级分类、最多两个颜色和季节。重复幂等键返回同一个单品，而不是创建副本。
 
 ### `list_wardrobe_items`
 
 输入：可选 `category`、`primary_color`、`cursor`、`limit`。`limit` 默认 20，最大 50。
 
 输出只返回当前用户未删除单品和下一页游标。
-
-### `get_wardrobe_item`
-
-通过单品 ID 取得详情。不存在和不属于当前用户都对外返回 `ITEM_NOT_FOUND`，避免枚举他人数据。
 
 ### `update_wardrobe_item`
 
@@ -122,34 +107,9 @@ MVP 对外暴露七个业务工具。上传图片的具体传递方式在 Apps S
 }
 ```
 
-### `generate_outfits`
+### 穿搭生成
 
-输入：
-
-```json
-{ "request": "简单舒服的日常穿搭", "count": 3 }
-```
-
-约束：`count` 为 1–3；`request` 最长 1000 字符。
-
-输出：
-
-```json
-{
-  "request": "简单舒服的日常穿搭",
-  "outfits": [
-    {
-      "id": "uuid",
-      "items": [
-        { "item_id": "uuid", "role": "top", "name": "白色衬衫", "image_url": "signed-url" }
-      ],
-      "explanation": "配色干净，适合轻松的日常穿着。",
-      "existing_items_only": true
-    }
-  ],
-  "gap": null
-}
-```
+宿主 Agent 调用 `list_wardrobe_items` 获取已有单品后，用自身推理能力组合 1–3 套穿搭。服务端不调用 LLM。
 
 ## 5. 工具调用安全
 
@@ -166,4 +126,3 @@ MVP 对外暴露七个业务工具。上传图片的具体传递方式在 Apps S
 - MCP 工具名称在内测后尽量保持稳定。
 - 新增可选字段保持向后兼容。
 - 删除或改变字段语义必须记录决策并提供迁移期。
-

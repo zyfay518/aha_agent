@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { analyzeWardrobeImage } from "@/lib/openai/analyze-wardrobe-image";
 import { createClient } from "@/lib/supabase/server";
 import {
   allowedImageTypes,
@@ -43,24 +42,8 @@ export async function uploadAndAnalyze(formData: FormData) {
     fail("/wardrobe/new", "无法建立分析任务，请稍后重试");
   }
 
-  let warning: string | null = null;
-  try {
-    const analysis = await analyzeWardrobeImage(image);
-    const status = analysis.is_wearable_item && analysis.item_count === 1 && analysis.candidate ? "review" : "rejected";
-    await supabase.from("pending_uploads").update({ status, analysis }).eq("id", uploadId);
-    if (status === "rejected") {
-      warning = analysis.item_count === 2 ? "照片中似乎有多件单品，请一次只拍一件" : "没有识别到可收纳的衣物单品";
-    }
-  } catch (error) {
-    const code = error instanceof Error ? error.message.slice(0, 180) : "ANALYSIS_FAILED";
-    await supabase.from("pending_uploads").update({ status: "failed", error_code: code }).eq("id", uploadId);
-    warning = code.startsWith("OPENAI_429")
-      ? "AI 服务当前额度不足或请求繁忙，请先用标签快速确认"
-      : "AI 识别暂时失败，请先用标签快速确认";
-  }
-
-  if (warning) redirect(`/wardrobe/new/review?upload=${uploadId}&warning=${encodeURIComponent(warning)}`);
-  redirect(`/wardrobe/new/review?upload=${uploadId}`);
+  await supabase.from("pending_uploads").update({ status: "review", error_code: null }).eq("id", uploadId);
+  redirect(`/wardrobe/new/review?upload=${uploadId}&warning=${encodeURIComponent("网页仅作为备用入口，请用标签确认；在 Agent 对话中会由 Agent 直接识别图片")}`);
 }
 
 export async function confirmWardrobeItem(formData: FormData) {

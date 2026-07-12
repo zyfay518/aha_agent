@@ -1,0 +1,15 @@
+interface:
+  display_name: "Aha 衣橱"
+  short_description: "在对话中识别衣物、管理个人衣橱并推荐已有单品穿搭"
+  default_prompt: "Use $aha-wardrobe to add this clothing item to my wardrobe."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "aha-wardrobe"
+      description: "Aha 远程衣橱存储与查询服务"
+      transport: "streamable_http"
+      url: "https://aha-agent.vercel.app/mcp"
+
+policy:
+  allow_implicit_invocation: true
