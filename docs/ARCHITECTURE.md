@@ -3,7 +3,7 @@
 > 文档性质：持续更新的系统设计与代码地图  
 > 当前版本：0.1  
 > 建立日期：2026-07-12  
-> 状态：目标架构，尚未开始实现
+> 状态：阶段 1 实施中；Supabase 与 Web 骨架已落地
 
 ## 1. 架构目标
 
@@ -50,6 +50,15 @@
 | Agent 协议 | MCP | 向 ChatGPT 暴露结构化工具 |
 | ChatGPT UI | Apps SDK | 对话中的确认卡和穿搭卡片 |
 | 测试 | Vitest、Playwright | 单元、接口和端到端测试 |
+
+当前基础设施：
+
+- Supabase 项目：`aha_agent`。
+- Supabase project ref：`icgsgjbywmbizqkzduve`。
+- 区域：`ap-southeast-1`。
+- API URL：`https://icgsgjbywmbizqkzduve.supabase.co`。
+- 私有 Storage bucket：`wardrobe-private`。
+- Vercel：等待首次 CLI OAuth 后创建项目。
 
 所有选择均须在实际实施时验证。发生替换时，在 `PROJECT_LOG.md` 增加架构决策记录。
 
@@ -362,3 +371,12 @@ aha_agent/
 
 所有重要变化还需在 `PROJECT_LOG.md` 追加对应决策或变更记录。
 
+## 13. 详细规格索引
+
+- `docs/specs/UX_FLOWS.md`：页面、状态和用户流程。
+- `docs/specs/DATA_MODEL.md`：数据库、RLS、存储和删除流程。
+- `docs/specs/API_MCP_CONTRACT.md`：Web API 与 MCP 工具契约。
+- `docs/specs/AI_CONTRACT.md`：模型任务和结构化输出约束。
+- `docs/specs/ACCEPTANCE_CASES.md`：阶段 0 形成的验收测试基线。
+
+实现代码若与详细规格不一致，应先记录差异和原因，再更新规格，不能让文档静默失效。
