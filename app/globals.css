@@ -71,6 +71,15 @@ input:focus { outline: 2px solid #b7c2b1; border-color: var(--accent); }
 .review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, .85fr); gap: 42px; align-items: start; }
 .review-image { position: relative; min-height: 600px; display: grid; place-items: center; background: white; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .review-form { padding: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.tag-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.tag-fieldset legend { margin-bottom: 10px; font-size: 14px; font-weight: 700; }
+.tag-fieldset legend small { margin-left: 6px; color: var(--muted); font-weight: 400; }
+.tag-options { display: flex; flex-wrap: wrap; gap: 9px; }
+.choice-tag { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; min-height: 38px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: white; cursor: pointer; font-weight: 500; }
+.choice-tag:hover { border-color: var(--accent); }
+.choice-tag:has(input:checked), .choice-tag.selected { color: white; border-color: var(--accent); background: var(--accent); }
+.choice-tag input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.tag-options.colors .choice-tag { min-width: 72px; }
 
 @media (max-width: 700px) {
   .site-header { padding: 0 16px; }

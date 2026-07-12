@@ -4,7 +4,14 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ReviewForm } from "./review-form";
 
-type Candidate = { name?: string; category?: string; subcategory?: string; primary_color?: string };
+type Candidate = {
+  name?: string;
+  category?: string;
+  subcategory?: string;
+  primary_color?: string;
+  secondary_color?: string | null;
+  season_tags?: string[];
+};
 
 export default async function ReviewPage({ searchParams }: { searchParams: Promise<{ upload?: string; error?: string; warning?: string }> }) {
   const params = await searchParams;
@@ -12,7 +19,13 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   if (!claimsData?.claims?.sub) redirect("/login");
-  const { data: pending } = await supabase.from("pending_uploads").select("storage_path,analysis,status").eq("id", params.upload).single();
+  const userId = claimsData.claims.sub;
+  const { data: pending } = await supabase
+    .from("pending_uploads")
+    .select("storage_path,analysis,status")
+    .eq("id", params.upload)
+    .eq("user_id", userId)
+    .maybeSingle();
   if (!pending) redirect("/wardrobe/new?error=" + encodeURIComponent("上传记录不存在或已失效"));
   const { data: signed } = await supabase.storage.from("wardrobe-private").createSignedUrl(pending.storage_path, 600);
   const candidate = (pending.analysis as { candidate?: Candidate } | null)?.candidate ?? {};

@@ -54,7 +54,9 @@ export async function uploadAndAnalyze(formData: FormData) {
   } catch (error) {
     const code = error instanceof Error ? error.message.slice(0, 180) : "ANALYSIS_FAILED";
     await supabase.from("pending_uploads").update({ status: "failed", error_code: code }).eq("id", uploadId);
-    warning = "AI 识别暂时失败，你仍可以手动填写";
+    warning = code.startsWith("OPENAI_429")
+      ? "AI 服务当前额度不足或请求繁忙，请先用标签快速确认"
+      : "AI 识别暂时失败，请先用标签快速确认";
   }
 
   if (warning) redirect(`/wardrobe/new/review?upload=${uploadId}&warning=${encodeURIComponent(warning)}`);
@@ -71,21 +73,25 @@ export async function confirmWardrobeItem(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim().slice(0, 80);
   const category = String(formData.get("category") ?? "");
   const subcategory = String(formData.get("subcategory") ?? "");
-  const primaryColor = String(formData.get("primary_color") ?? "");
-  if (!uploadId || !name || !isCategory(category) || !isSubcategory(category, subcategory) || !isColor(primaryColor)) fail(`/wardrobe/new/review?upload=${uploadId}`, "请检查名称、分类和颜色");
+  const selectedColors = formData.getAll("colors").map(String).filter(isColor).slice(0, 2);
+  const primaryColor = selectedColors[0] ?? "unknown";
+  const secondaryColor = selectedColors[1] ?? null;
+  const allowedSeasons = ["spring", "summer", "autumn", "winter"];
+  const seasonTags = formData.getAll("season_tags").map(String).filter((value) => allowedSeasons.includes(value));
+  if (!uploadId || !name || !isCategory(category) || !isSubcategory(category, subcategory)) fail(`/wardrobe/new/review?upload=${uploadId}`, "请检查名称和类别");
 
   const { data: existing } = await supabase.from("wardrobe_items").select("id").eq("source_upload_id", uploadId).maybeSingle();
-  if (existing) redirect("/wardrobe");
+  if (existing) redirect("/wardrobe?message=" + encodeURIComponent("这件单品已经在衣橱里了"));
 
-  const { data: pending } = await supabase.from("pending_uploads").select("storage_path,analysis,status").eq("id", uploadId).single();
+  const { data: pending } = await supabase
+    .from("pending_uploads")
+    .select("storage_path,analysis,status")
+    .eq("id", uploadId)
+    .eq("user_id", userId)
+    .maybeSingle();
   if (!pending || pending.status === "confirmed") fail("/wardrobe/new", "这次上传已失效，请重新选择图片");
 
-  const extension = pending.storage_path.split(".").pop() || "jpg";
   const itemId = randomUUID();
-  const finalPath = `items/${userId}/${itemId}/original.${extension}`;
-  const { error: moveError } = await supabase.storage.from("wardrobe-private").move(pending.storage_path, finalPath);
-  if (moveError) fail(`/wardrobe/new/review?upload=${uploadId}`, "保存图片失败，请稍后重试");
-
   const candidate = pending.analysis && typeof pending.analysis === "object" && "candidate" in pending.analysis ? pending.analysis.candidate : null;
   const { error: insertError } = await supabase.from("wardrobe_items").insert({
     id: itemId,
@@ -95,14 +101,14 @@ export async function confirmWardrobeItem(formData: FormData) {
     category,
     subcategory,
     primary_color: primaryColor,
-    secondary_color: candidate && typeof candidate === "object" && "secondary_color" in candidate ? candidate.secondary_color : null,
-    season_tags: candidate && typeof candidate === "object" && "season_tags" in candidate ? candidate.season_tags : [],
+    secondary_color: secondaryColor,
+    season_tags: seasonTags,
     style_tags: candidate && typeof candidate === "object" && "style_tags" in candidate ? candidate.style_tags : [],
-    original_image_path: finalPath,
+    original_image_path: pending.storage_path,
     ai_metadata: pending.analysis,
   });
   if (insertError) {
-    await supabase.storage.from("wardrobe-private").move(finalPath, pending.storage_path);
+    if (insertError.code === "23505") redirect("/wardrobe?message=" + encodeURIComponent("这件单品已经在衣橱里了"));
     fail(`/wardrobe/new/review?upload=${uploadId}`, "保存单品失败，请重试");
   }
 

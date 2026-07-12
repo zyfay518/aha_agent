@@ -96,10 +96,7 @@ export async function analyzeWardrobeImage(file: File): Promise<WardrobeImageAna
   if (!apiKey) throw new Error("OPENAI_NOT_CONFIGURED");
 
   const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const requestBody = JSON.stringify({
       model: process.env.OPENAI_VISION_MODEL || "gpt-5.4-mini-2026-03-17",
       reasoning: { effort: "none" },
       max_output_tokens: 1000,
@@ -111,13 +108,31 @@ export async function analyzeWardrobeImage(file: File): Promise<WardrobeImageAna
         ],
       }],
       text: { format: { type: "json_schema", name: "wardrobe_item_analysis", strict: true, schema } },
-    }),
-    signal: AbortSignal.timeout(45_000),
   });
+
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: requestBody,
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (response.status !== 429 || attempt === 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  }
+
+  if (!response) throw new Error("EMPTY_OPENAI_RESPONSE");
 
   if (!response.ok) {
     const requestId = response.headers.get("x-request-id");
-    throw new Error(`OPENAI_${response.status}${requestId ? `_${requestId}` : ""}`);
+    let errorType = "request_failed";
+    try {
+      const body = await response.json() as { error?: { code?: string; type?: string } };
+      errorType = body.error?.code || body.error?.type || errorType;
+    } catch {}
+    const safeType = errorType.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 50);
+    throw new Error(`OPENAI_${response.status}_${safeType}${requestId ? `_${requestId}` : ""}`);
   }
 
   const text = extractOutputText(await response.json());
