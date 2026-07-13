@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { normalizeItemImage } from "@/lib/wardrobe/normalize-item-image";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ const tools = [
   {
     name: "add_wardrobe_item",
     title: "把已确认单品加入衣橱",
-    description: "Use this after the host agent has analyzed a user-provided image and the user has confirmed category, seasons, and colors. The Aha server does not perform AI image recognition.",
+    description: "Use this after the host agent has analyzed a user-provided image and the user has confirmed category, seasons, and colors. Saving is NOT complete until attach_item_image succeeds for the returned item ID. Never tell the user the item was saved before both calls succeed.",
     inputSchema: {
       type: "object", additionalProperties: false,
       required: ["access_code", "idempotency_key", "name", "category", "subcategory", "colors", "seasons"],
@@ -75,15 +76,15 @@ const tools = [
   {
     name: "get_wardrobe_summary",
     title: "获取衣橱概览",
-    description: "Use this when the user asks for wardrobe counts or wants to open the optional visual wardrobe.",
+    description: "Use this when the user asks to see or open the wardrobe. Return only wardrobe_url as a clickable link, with no inventory, explanation, or extra prose unless the user explicitly asks for a text summary. The URL is stable for this user.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code"], properties: { access_code: { type: "string" } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
     _meta: { ui: { resourceUri: wardrobeResourceUri }, "openai/outputTemplate": wardrobeResourceUri },
   },
   {
     name: "attach_item_image",
-    title: "保存衣橱单品原图",
-    description: "Attach the user-uploaded image to an item immediately after add_wardrobe_item. Pass the temporary HTTPS download URL supplied by the ChatGPT host.",
+    title: "保存白底服装主体图",
+    description: "Mandatory immediately after add_wardrobe_item. Attach the host-agent-produced catalog image containing only the clothing subject on a pure white background. Pass its temporary HTTPS download URL. If this fails, do not claim the item was saved; retry or roll back the incomplete record.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_id", "file_url"], properties: { access_code: { type: "string" }, item_id: { type: "string", format: "uuid" }, file_url: { type: "string", format: "uri" } } },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: true },
   },
@@ -119,9 +120,8 @@ async function callTool(name: string, args: Record<string, unknown>) {
     if(!response.ok)throw new Error("IMAGE_DOWNLOAD_FAILED");
     const mime=(response.headers.get("content-type")||"").split(";")[0];
     if(!["image/jpeg","image/png","image/webp"].includes(mime))throw new Error("UNSUPPORTED_IMAGE_TYPE");
-    const bytes=Buffer.from(await response.arrayBuffer());
-    if(bytes.length>8*1024*1024)throw new Error("IMAGE_TOO_LARGE");
-    const {data,error}=await supabase.rpc("agent_put_item_image",{p_access_code:accessCode,p_item_id:args.item_id,p_mime_type:mime,p_base64:bytes.toString("base64")});
+    const normalized=await normalizeItemImage(Buffer.from(await response.arrayBuffer()),mime);
+    const {data,error}=await supabase.rpc("agent_put_item_image",{p_access_code:accessCode,p_item_id:args.item_id,p_mime_type:normalized.mimeType,p_base64:normalized.bytes.toString("base64")});
     if(error)throw new Error(error.message.includes("ITEM_NOT_FOUND")?"ITEM_NOT_FOUND":"IMAGE_SAVE_FAILED");
     return {saved:Boolean(data),item_id:args.item_id};
   }
@@ -175,7 +175,10 @@ export async function POST(request: Request) {
     if (!name) return jsonRpcError(body.id, -32602, "Missing tool name");
     try {
       const data = await callTool(name, body.params?.arguments ?? {});
-      return jsonRpc(body.id, { content: [{ type: "text", text: "Aha 衣橱操作已完成。" }], structuredContent: data });
+      const text=name==="get_wardrobe_summary"&&typeof (data as {wardrobe_url?:unknown})?.wardrobe_url==="string"
+        ? String((data as {wardrobe_url:string}).wardrobe_url)
+        : "Aha 衣橱操作已完成。";
+      return jsonRpc(body.id, { content: [{ type: "text", text }], structuredContent: data });
     } catch (error) {
       const message = error instanceof Error ? error.message : "TOOL_EXECUTION_FAILED";
       return jsonRpc(body.id, { isError: true, content: [{ type: "text", text: message }] });

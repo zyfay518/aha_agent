@@ -20,7 +20,9 @@ Use the host agent's native vision and reasoning. Never call a separate paid vis
 3. Infer a concise Chinese name, category, subcategory, up to two colors, and seasons.
 4. If several independent items are present or confidence is low, ask one concise question before saving.
 5. Present a compact confirmation using only three dimensions: category, seasons, and colors. Allow multiple seasons and at most two colors.
-6. After confirmation, call `add_wardrobe_item`. Do not save before confirmation.
+6. After confirmation, use the host's own image-editing capability to extract only the garment and place it on a pure white catalog background. Remove people, hangers, screenshots, shop UI, prices, text, surrounding objects, and the original scene while preserving the exact garment design and colors.
+7. Call `add_wardrobe_item`, then immediately call `attach_item_image` with the processed white-background image and returned item ID. These two calls form one logical save operation.
+8. Do not say the item was saved until both calls succeed. If image attachment fails, retry it; if it cannot be completed, delete or clearly roll back the incomplete record and report that saving did not complete.
 
 Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 
@@ -30,7 +32,7 @@ Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 - Call `update_wardrobe_item` only after identifying one exact item.
 - Require explicit confirmation immediately before `delete_wardrobe_item`.
 - Call `get_wardrobe_summary` when the user asks for an overview.
-- When the user asks to see the wardrobe, return the visual wardrobe URL. Do not replace the visual result with a text-only inventory unless the user asks for text.
+- When the user asks to see or open the wardrobe, call `get_wardrobe_summary` and reply with only its stable `wardrobe_url` as a clickable link. Do not add item counts, inventory, explanations, apologies, or other prose unless the user explicitly requests a text summary.
 
 ## Recommend outfits
 
@@ -42,4 +44,4 @@ Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 
 ## Response style
 
-Keep confirmations short and conversational. Prefer clickable host UI when available. When only text is available, use compact lines such as `类别：下装｜季节：夏｜颜色：黑色`.
+Keep confirmations short and conversational. Prefer clickable host UI when available. When only text is available, use compact lines such as `类别：下装｜季节：夏｜颜色：黑色`. A successful add response may be one short line; a wardrobe-open response must be the link only.
