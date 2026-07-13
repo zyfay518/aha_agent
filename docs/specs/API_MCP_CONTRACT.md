@@ -84,13 +84,13 @@ MVP 对外暴露七个业务工具。上传图片的具体传递方式在 Apps S
 
 ### `attach_item_image`
 
-输入访问码、刚创建的 `item_id` 和宿主提供的临时 HTTPS 图片地址。服务端校验图片格式和大小，并统一转为白底 JPEG 目录图后覆盖该单品的展示图片。
+输入访问码、刚创建的 `item_id`，并二选一提供：宿主临时 HTTPS 图片地址；或 Codex 本地编辑结果的 `image_base64` 与 `mime_type`。服务端校验图片格式和大小，并统一转为白底 JPEG 目录图后覆盖该单品的展示图片。
 
 ### `list_wardrobe_items`
 
 输入：可选 `category`、`primary_color`、`cursor`、`limit`。`limit` 默认 20，最大 50。
 
-输出只返回当前用户未删除单品和下一页游标。
+输出只返回当前用户未删除单品和下一页游标；每件单品包含 `has_image`，新增流程必须校验新单品为 `true` 后才能宣告保存成功。
 
 ### `update_wardrobe_item`
 

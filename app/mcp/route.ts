@@ -84,8 +84,8 @@ const tools = [
   {
     name: "attach_item_image",
     title: "保存白底服装主体图",
-    description: "Mandatory immediately after add_wardrobe_item. Attach the host-agent-produced catalog image containing only the clothing subject on a pure white background. Pass its temporary HTTPS download URL. If this fails, do not claim the item was saved; retry or roll back the incomplete record.",
-    inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_id", "file_url"], properties: { access_code: { type: "string" }, item_id: { type: "string", format: "uuid" }, file_url: { type: "string", format: "uri" } } },
+    description: "Mandatory immediately after add_wardrobe_item. Attach the host-agent-produced catalog image containing only the clothing subject on a pure white background. Use file_url in ChatGPT or image_base64 plus mime_type when the host only has a local edited file. If this fails, do not claim the item was saved; retry or roll back the incomplete record.",
+    inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_id"], anyOf: [{ required: ["file_url"] }, { required: ["image_base64", "mime_type"] }], properties: { access_code: { type: "string" }, item_id: { type: "string", format: "uuid" }, file_url: { type: "string", format: "uri" }, image_base64: { type: "string", minLength: 16 }, mime_type: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] } } },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: true },
   },
   {
@@ -114,13 +114,22 @@ async function callTool(name: string, args: Record<string, unknown>) {
   const accessCode=String(args.access_code??"");
   const origin=process.env.NEXT_PUBLIC_APP_URL||"https://aha-agent.vercel.app";
   if(name==="attach_item_image"){
-    const url=new URL(String(args.file_url??""));
-    if(url.protocol!=="https:")throw new Error("INVALID_IMAGE_URL");
-    const response=await fetch(url,{redirect:"follow",signal:AbortSignal.timeout(15000)});
-    if(!response.ok)throw new Error("IMAGE_DOWNLOAD_FAILED");
-    const mime=(response.headers.get("content-type")||"").split(";")[0];
-    if(!["image/jpeg","image/png","image/webp"].includes(mime))throw new Error("UNSUPPORTED_IMAGE_TYPE");
-    const normalized=await normalizeItemImage(Buffer.from(await response.arrayBuffer()),mime);
+    let bytes:Buffer;
+    let mime:string;
+    if(typeof args.file_url==="string"&&args.file_url){
+      const url=new URL(args.file_url);
+      if(url.protocol!=="https:")throw new Error("INVALID_IMAGE_URL");
+      const response=await fetch(url,{redirect:"follow",signal:AbortSignal.timeout(15000)});
+      if(!response.ok)throw new Error("IMAGE_DOWNLOAD_FAILED");
+      mime=(response.headers.get("content-type")||"").split(";")[0];
+      bytes=Buffer.from(await response.arrayBuffer());
+    }else{
+      mime=String(args.mime_type??"");
+      const encoded=String(args.image_base64??"");
+      if(!encoded||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))throw new Error("INVALID_IMAGE_BASE64");
+      bytes=Buffer.from(encoded,"base64");
+    }
+    const normalized=await normalizeItemImage(bytes,mime);
     const {data,error}=await supabase.rpc("agent_put_item_image",{p_access_code:accessCode,p_item_id:args.item_id,p_mime_type:normalized.mimeType,p_base64:normalized.bytes.toString("base64")});
     if(error)throw new Error(error.message.includes("ITEM_NOT_FOUND")?"ITEM_NOT_FOUND":"IMAGE_SAVE_FAILED");
     return {saved:Boolean(data),item_id:args.item_id};

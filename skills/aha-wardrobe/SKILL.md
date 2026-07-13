@@ -21,8 +21,8 @@ Use the host agent's native vision and reasoning. Never call a separate paid vis
 4. If several independent items are present or confidence is low, ask one concise question before saving.
 5. Present a compact confirmation using only three dimensions: category, seasons, and colors. Allow multiple seasons and at most two colors.
 6. After confirmation, use the host's own image-editing capability to extract only the garment and place it on a pure white catalog background. Remove people, hangers, screenshots, shop UI, prices, text, surrounding objects, and the original scene while preserving the exact garment design and colors.
-7. Call `add_wardrobe_item`, then immediately call `attach_item_image` with the processed white-background image and returned item ID. These two calls form one logical save operation.
-8. Do not say the item was saved until both calls succeed. If image attachment fails, retry it; if it cannot be completed, delete or clearly roll back the incomplete record and report that saving did not complete.
+7. Call `add_wardrobe_item`, then immediately call `attach_item_image` with the processed white-background image and returned item ID. Use a host temporary HTTPS URL when available; in Codex, encode the local edited image and pass `image_base64` with its `mime_type`. These two calls form one logical save operation.
+8. Call `list_wardrobe_items` and confirm that the returned exact item has `has_image: true`. Do not say the item was saved until creation, attachment, and this verification all succeed. If image attachment fails, retry it; if it cannot be completed, delete or clearly roll back the incomplete record and report that saving did not complete.
 
 Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 
