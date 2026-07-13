@@ -227,6 +227,8 @@
 - 新增 `create_outfit_board` MCP 工具及 `/outfit/[code]` 白底商品拼贴页面，穿搭只组合用户真实衣橱图片，不生成真人试穿图。
 - `list_wardrobe_items` 和 `get_wardrobe_summary` 现在同时返回图片衣橱链接，避免 ChatGPT 只返回文字清单。
 - 本地 ESLint、TypeScript 和 Next.js 生产构建通过；进入线上真实数据回归和 ChatGPT 开发者模式验收阶段。
+- 生产回归通过：测试账号返回 2 件单品；图片衣橱页与穿搭板页均返回 HTTP 200，并各自成功读取 2 张真实 JPEG 原图（约 94 KB、156 KB）。
+- ChatGPT 验收入口暂时受本机环境阻塞：Chrome 正在运行，但选定配置未安装或启用 ChatGPT Chrome Extension；安装后继续完成 ChatGPT 开发者模式 MCP 添加与新对话验收。
 - 删除 `.env.example` 中 OpenAI API Key 与模型配置；后端不再需要模型额度。
 - 本地 MCP 回归通过：初始化、工具清单、访问验证、新增、列表、重复写入幂等和软删除。
 - 当前限制：Agent 对话原图尚未持久化；下一阶段用 ChatGPT Apps SDK 内嵌卡片完成文件上传与图片卡片渲染。
