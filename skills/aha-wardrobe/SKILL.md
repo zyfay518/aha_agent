@@ -29,14 +29,16 @@ Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 - Call `list_wardrobe_items` before answering what the user owns.
 - Call `update_wardrobe_item` only after identifying one exact item.
 - Require explicit confirmation immediately before `delete_wardrobe_item`.
-- Call `get_wardrobe_summary` when the user asks for an overview or visual wardrobe link.
+- Call `get_wardrobe_summary` when the user asks for an overview.
+- When the user asks to see the wardrobe, return the visual wardrobe URL. Do not replace the visual result with a text-only inventory unless the user asks for text.
 
 ## Recommend outfits
 
 1. Call `list_wardrobe_items` with a sufficiently high limit.
 2. Build 1–3 outfits from existing items first.
-3. Return item-card combinations, not generated try-on images.
-4. Suggest a purchase only when no reasonable owned substitute exists. Describe one missing specification; do not recommend a store or shopping link.
+3. Return a white-background product collage made from the real wardrobe item images: top near the upper area, bottom in the center, shoes and bag/accessories around it, with restrained connector lines and short Chinese labels. Do not generate try-on people.
+4. Prefer a directly displayed outfit-board image; include its link as fallback.
+5. Suggest a purchase only when no reasonable owned substitute exists. Describe one missing specification; do not recommend a store or shopping link.
 
 ## Response style
 
