@@ -80,6 +80,20 @@ const tools = [
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
     _meta: { ui: { resourceUri: wardrobeResourceUri }, "openai/outputTemplate": wardrobeResourceUri },
   },
+  {
+    name: "attach_item_image",
+    title: "保存衣橱单品原图",
+    description: "Attach the user-uploaded image to an item immediately after add_wardrobe_item. Pass the temporary HTTPS download URL supplied by the ChatGPT host.",
+    inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_id", "file_url"], properties: { access_code: { type: "string" }, item_id: { type: "string", format: "uuid" }, file_url: { type: "string", format: "uri" } } },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: true },
+  },
+  {
+    name: "create_outfit_board",
+    title: "生成图片穿搭板",
+    description: "Create a visual outfit-board link from 1–5 exact wardrobe item IDs selected by the host agent.",
+    inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_ids"], properties: { access_code: { type: "string" }, item_ids: { type: "array", minItems: 1, maxItems: 5, items: { type: "string", format: "uuid" } }, title: { type: "string", maxLength: 40 } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+  },
 ] as const;
 
 function rpcClient() {
@@ -96,6 +110,30 @@ function jsonRpcError(id: JsonRpcRequest["id"], code: number, message: string, s
 
 async function callTool(name: string, args: Record<string, unknown>) {
   const supabase = rpcClient();
+  const accessCode=String(args.access_code??"");
+  const origin=process.env.NEXT_PUBLIC_APP_URL||"https://aha-agent.vercel.app";
+  if(name==="attach_item_image"){
+    const url=new URL(String(args.file_url??""));
+    if(url.protocol!=="https:")throw new Error("INVALID_IMAGE_URL");
+    const response=await fetch(url,{redirect:"follow",signal:AbortSignal.timeout(15000)});
+    if(!response.ok)throw new Error("IMAGE_DOWNLOAD_FAILED");
+    const mime=(response.headers.get("content-type")||"").split(";")[0];
+    if(!["image/jpeg","image/png","image/webp"].includes(mime))throw new Error("UNSUPPORTED_IMAGE_TYPE");
+    const bytes=Buffer.from(await response.arrayBuffer());
+    if(bytes.length>8*1024*1024)throw new Error("IMAGE_TOO_LARGE");
+    const {data,error}=await supabase.rpc("agent_put_item_image",{p_access_code:accessCode,p_item_id:args.item_id,p_mime_type:mime,p_base64:bytes.toString("base64")});
+    if(error)throw new Error(error.message.includes("ITEM_NOT_FOUND")?"ITEM_NOT_FOUND":"IMAGE_SAVE_FAILED");
+    return {saved:Boolean(data),item_id:args.item_id};
+  }
+  if(name==="create_outfit_board"){
+    const ids=Array.isArray(args.item_ids)?args.item_ids.map(String):[];
+    const {data,error}=await supabase.rpc("agent_list_wardrobe_items",{p_access_code:accessCode,p_category:null,p_limit:50});
+    if(error)throw new Error(error.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"TOOL_EXECUTION_FAILED");
+    const owned=new Set((data?.items??[]).map((item:{id:string})=>item.id));
+    if(!ids.length||ids.some(id=>!owned.has(id)))throw new Error("ITEM_NOT_FOUND");
+    const title=encodeURIComponent(String(args.title||"今日穿搭灵感"));
+    return {outfit_url:`${origin}/outfit/${encodeURIComponent(accessCode)}?items=${ids.join(",")}&title=${title}`,item_ids:ids};
+  }
   let operation: string;
   let params: Record<string, unknown>;
 
@@ -113,6 +151,8 @@ async function callTool(name: string, args: Record<string, unknown>) {
 
   const { data, error } = await supabase.rpc(operation, params);
   if (error) throw new Error(error.message.includes("INVALID_ACCESS_CODE") ? "INVALID_ACCESS_CODE" : error.message.includes("ITEM_NOT_FOUND") ? "ITEM_NOT_FOUND" : "TOOL_EXECUTION_FAILED");
+  if(name==="get_wardrobe_summary")return {...data,wardrobe_url:`${origin}/closet/${encodeURIComponent(accessCode)}`};
+  if(name==="list_wardrobe_items")return {...data,wardrobe_url:`${origin}/closet/${encodeURIComponent(accessCode)}`};
   return data;
 }
 

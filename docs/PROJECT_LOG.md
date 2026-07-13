@@ -218,6 +218,15 @@
 - 新增 `skills/aha-wardrobe`，通过 Skill 格式校验。
 - 新增 `POST /mcp` 的无状态 MCP 原型，提供访问验证、新增、列表、修改、删除和衣橱概览六个工具。
 - 新增哈希访问码与数据库 RPC 边界；MCP 不接收或信任 `user_id`，所有查询由访问码解析固定用户。
+
+### 2026-07-13 — ChatGPT 图片闭环与可视化验收版
+
+- 新增原图持久化 RPC 与受访问码保护的图片读取接口，衣橱记录和原图保持一一对应。
+- 新增 `attach_item_image` MCP 工具：ChatGPT 自身完成识图和用户确认后，把宿主提供的临时图片下载地址绑定到已创建的单品；Aha 后端不调用模型 API。
+- 新增图片衣橱页面 `/closet/[code]`，展示真实单品图片、名称、分类和颜色。
+- 新增 `create_outfit_board` MCP 工具及 `/outfit/[code]` 白底商品拼贴页面，穿搭只组合用户真实衣橱图片，不生成真人试穿图。
+- `list_wardrobe_items` 和 `get_wardrobe_summary` 现在同时返回图片衣橱链接，避免 ChatGPT 只返回文字清单。
+- 本地 ESLint、TypeScript 和 Next.js 生产构建通过；进入线上真实数据回归和 ChatGPT 开发者模式验收阶段。
 - 删除 `.env.example` 中 OpenAI API Key 与模型配置；后端不再需要模型额度。
 - 本地 MCP 回归通过：初始化、工具清单、访问验证、新增、列表、重复写入幂等和软删除。
 - 当前限制：Agent 对话原图尚未持久化；下一阶段用 ChatGPT Apps SDK 内嵌卡片完成文件上传与图片卡片渲染。
