@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { normalizeItemImage } from "@/lib/wardrobe/normalize-item-image";
+import { buildOutfitBoard } from "@/lib/wardrobe/build-outfit-board";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,7 +92,7 @@ const tools = [
   {
     name: "create_outfit_board",
     title: "生成图片穿搭板",
-    description: "Create a visual outfit-board link from 1–5 exact wardrobe item IDs selected by the host agent.",
+    description: "Create and directly display a visual outfit-board image from 1–5 exact wardrobe item IDs selected by the host agent. Show the returned image in the conversation. Do not send outfit_url unless inline image rendering is unavailable.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_ids"], properties: { access_code: { type: "string" }, item_ids: { type: "array", minItems: 1, maxItems: 5, items: { type: "string", format: "uuid" } }, title: { type: "string", maxLength: 40 } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
   },
@@ -146,9 +147,18 @@ async function callTool(name: string, args: Record<string, unknown>) {
     if(error)throw new Error(error.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"TOOL_EXECUTION_FAILED");
     const owned=new Set((data?.items??[]).map((item:{id:string})=>item.id));
     if(!ids.length||ids.some(id=>!owned.has(id)))throw new Error("ITEM_NOT_FOUND");
+    const wardrobeItems=(data?.items??[]) as Array<{id:string;name:string}>;
+    const selected=ids.map(id=>wardrobeItems.find(item=>item.id===id)).filter((item):item is {id:string;name:string}=>Boolean(item));
+    const imageResults=await Promise.all(selected.map(async(item)=>{
+      const result=await supabase.rpc("agent_get_item_image",{p_access_code:accessCode,p_item_id:item.id});
+      if(result.error||typeof result.data?.base64!=="string")throw new Error("IMAGE_NOT_FOUND");
+      return {name:item.name,image:Buffer.from(result.data.base64,"base64")};
+    }));
     const viewId=await getWardrobeViewId(supabase,accessCode);
-    const title=encodeURIComponent(String(args.title||"今日穿搭灵感"));
-    return {outfit_url:`${origin}/outfit/${viewId}?items=${ids.join(",")}&title=${title}`,item_ids:ids};
+    const boardTitle=String(args.title||"今日穿搭灵感");
+    const board=await buildOutfitBoard(imageResults,boardTitle);
+    const title=encodeURIComponent(boardTitle);
+    return {outfit_url:`${origin}/outfit/${viewId}?items=${ids.join(",")}&title=${title}`,item_ids:ids,image_base64:board.toString("base64"),image_mime_type:"image/jpeg"};
   }
   let operation: string;
   let params: Record<string, unknown>;
@@ -193,6 +203,13 @@ export async function POST(request: Request) {
     if (!name) return jsonRpcError(body.id, -32602, "Missing tool name");
     try {
       const data = await callTool(name, body.params?.arguments ?? {});
+      if(name==="create_outfit_board"&&typeof (data as {image_base64?:unknown}).image_base64==="string"){
+        const imageData=String((data as {image_base64:string}).image_base64);
+        const mimeType=String((data as {image_mime_type?:string}).image_mime_type||"image/jpeg");
+        const {image_base64:discardedBase64,image_mime_type:discardedMime,...structuredContent}=data as Record<string,unknown>;
+        void discardedBase64; void discardedMime;
+        return jsonRpc(body.id,{content:[{type:"image",data:imageData,mimeType}],structuredContent});
+      }
       const text=name==="get_wardrobe_summary"&&typeof (data as {wardrobe_url?:unknown})?.wardrobe_url==="string"
         ? String((data as {wardrobe_url:string}).wardrobe_url)
         : "Aha 衣橱操作已完成。";

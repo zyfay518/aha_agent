@@ -38,8 +38,8 @@ Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 
 1. Call `list_wardrobe_items` with a sufficiently high limit.
 2. Build 1–3 outfits from existing items first.
-3. Return a white-background product collage made from the real wardrobe item images: top near the upper area, bottom in the center, shoes and bag/accessories around it, with restrained connector lines and short Chinese labels. Do not generate try-on people.
-4. Prefer a directly displayed outfit-board image; include its link as fallback.
+3. Call `create_outfit_board` with the exact selected item IDs. It returns a white-background product collage made from the real wardrobe item images. Do not generate try-on people.
+4. Display the returned image directly inside the conversation. Do not reply with `outfit_url` when the image content is available; use the link only as a fallback when the host cannot render the returned image.
 5. Suggest a purchase only when no reasonable owned substitute exists. Describe one missing specification; do not recommend a store or shopping link.
 
 ## Response style

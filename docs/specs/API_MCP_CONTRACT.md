@@ -54,7 +54,7 @@ Web 成功响应：
 
 ## 4. MCP 工具
 
-MVP 对外暴露七个业务工具。上传图片的具体传递方式在 Apps SDK 原型验证后确定，业务契约不依赖某种临时 URL 实现。
+MVP 对外暴露八个业务工具。图片既可通过宿主临时 URL，也可通过 Base64 传递；业务契约不依赖单一传输方式。
 
 ### `verify_access`
 
@@ -120,6 +120,26 @@ MVP 对外暴露七个业务工具。上传图片的具体传递方式在 Apps S
 ### 穿搭生成
 
 宿主 Agent 调用 `list_wardrobe_items` 获取已有单品后，用自身推理能力组合 1–3 套穿搭。服务端不调用 LLM。
+
+### `create_outfit_board`
+
+输入访问码、1–5 个属于当前用户的精确 `item_id`，以及可选标题。服务端读取这些单品已经保存的白底主体图并生成商品拼贴 JPEG。
+
+成功工具结果：
+
+```json
+{
+  "content": [
+    { "type": "image", "data": "<base64 JPEG>", "mimeType": "image/jpeg" }
+  ],
+  "structuredContent": {
+    "item_ids": ["..."],
+    "outfit_url": "仅供宿主无法渲染图片时降级使用的只读链接"
+  }
+}
+```
+
+Agent 必须优先把 `content` 中的图片直接显示在对话里。只有宿主明确无法渲染图片时才使用 `outfit_url`；正常回复不得只给“查看穿搭板”链接。
 
 ## 5. 工具调用安全
 
