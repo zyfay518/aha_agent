@@ -2,14 +2,13 @@ import sharp from "sharp";
 
 type OutfitBoardItem = {
   name: string;
+  category: "top"|"bottom"|"shoes"|"bag";
   image: Buffer;
 };
 
-function escapeXml(value:string){
-  return value.replace(/[<>&"']/g,(character)=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&apos;"})[character]!);
-}
+const categoryLabels={top:"TOP",bottom:"BOTTOM",shoes:"SHOES",bag:"BAG"} as const;
 
-export async function buildOutfitBoard(items:OutfitBoardItem[],title:string){
+export async function buildOutfitBoard(items:OutfitBoardItem[]){
   const columns=items.length===1?1:2;
   const rows=Math.ceil(items.length/columns);
   const width=1200;
@@ -39,14 +38,14 @@ export async function buildOutfitBoard(items:OutfitBoardItem[],title:string){
     });
     composites.push({input:image,left:x+40,top:y+24});
     composites.push({
-      input:Buffer.from(`<svg width="${cellWidth}" height="48"><text x="${cellWidth/2}" y="31" text-anchor="middle" font-family="Arial, PingFang SC, sans-serif" font-size="23" fill="#252521">${escapeXml(items[index].name.slice(0,30))}</text></svg>`),
+      input:Buffer.from(`<svg width="${cellWidth}" height="48"><text x="${cellWidth/2}" y="31" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="3" fill="#63735b">${categoryLabels[items[index].category]}</text></svg>`),
       left:x,
       top:y+393,
     });
   }
 
   composites.unshift({
-    input:Buffer.from(`<svg width="${width}" height="150"><text x="600" y="48" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="5" fill="#63735b">AHA OUTFIT</text><text x="600" y="112" text-anchor="middle" font-family="Arial, PingFang SC, sans-serif" font-size="46" fill="#252521">${escapeXml(title.slice(0,40))}</text></svg>`),
+    input:Buffer.from(`<svg width="${width}" height="150"><text x="600" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="5" fill="#63735b">AHA OUTFIT</text><text x="600" y="116" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" letter-spacing="4" fill="#252521">TODAY'S LOOK</text></svg>`),
     left:0,
     top:20,
   });

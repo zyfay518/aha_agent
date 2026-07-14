@@ -147,18 +147,20 @@ async function callTool(name: string, args: Record<string, unknown>) {
     if(error)throw new Error(error.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"TOOL_EXECUTION_FAILED");
     const owned=new Set((data?.items??[]).map((item:{id:string})=>item.id));
     if(!ids.length||ids.some(id=>!owned.has(id)))throw new Error("ITEM_NOT_FOUND");
-    const wardrobeItems=(data?.items??[]) as Array<{id:string;name:string}>;
-    const selected=ids.map(id=>wardrobeItems.find(item=>item.id===id)).filter((item):item is {id:string;name:string}=>Boolean(item));
+    type BoardCategory="top"|"bottom"|"shoes"|"bag";
+    type BoardSourceItem={id:string;name:string;category:BoardCategory};
+    const wardrobeItems=(data?.items??[]) as BoardSourceItem[];
+    const selected=ids.map(id=>wardrobeItems.find(item=>item.id===id)).filter((item):item is BoardSourceItem=>Boolean(item));
     const imageResults=await Promise.all(selected.map(async(item)=>{
       const result=await supabase.rpc("agent_get_item_image",{p_access_code:accessCode,p_item_id:item.id});
       if(result.error||typeof result.data?.base64!=="string")throw new Error("IMAGE_NOT_FOUND");
-      return {name:item.name,image:Buffer.from(result.data.base64,"base64")};
+      return {name:item.name,category:item.category,image:Buffer.from(result.data.base64,"base64")};
     }));
     const viewId=await getWardrobeViewId(supabase,accessCode);
     const boardTitle=String(args.title||"今日穿搭灵感");
-    const board=await buildOutfitBoard(imageResults,boardTitle);
+    const board=await buildOutfitBoard(imageResults);
     const title=encodeURIComponent(boardTitle);
-    return {outfit_url:`${origin}/outfit/${viewId}?items=${ids.join(",")}&title=${title}`,item_ids:ids,image_base64:board.toString("base64"),image_mime_type:"image/jpeg"};
+    return {outfit_url:`${origin}/outfit/${viewId}?items=${ids.join(",")}&title=${title}`,item_ids:ids,item_names:selected.map(item=>item.name),image_base64:board.toString("base64"),image_mime_type:"image/jpeg"};
   }
   let operation: string;
   let params: Record<string, unknown>;
