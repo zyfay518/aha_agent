@@ -1,54 +1,22 @@
-import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { logout } from "@/app/auth/actions";
 import { createClient } from "@/lib/supabase/server";
+import { WardrobeManager, type ManagedItem } from "./wardrobe-manager";
 
-const labels = { top: "上装", bottom: "下装", shoes: "鞋履", bag: "包袋" } as const;
-
-export default async function WardrobePage({ searchParams }: { searchParams: Promise<{ message?: string }> }) {
+export default async function WardrobePage({ searchParams }: { searchParams: Promise<{ message?: string; error?: string }> }) {
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   if (!claimsData?.claims?.sub) redirect("/login");
-
-  const { data: items } = await supabase
-    .from("wardrobe_items")
-    .select("id,name,category,primary_color,thumbnail_path,original_image_path,created_at")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
-
-  const counts = { top: 0, bottom: 0, shoes: 0, bag: 0 };
-  for (const item of items ?? []) counts[item.category as keyof typeof counts] += 1;
-  const { message } = await searchParams;
-  const imagePaths = (items ?? [])
-    .map((item) => item.thumbnail_path || item.original_image_path)
-    .filter((path): path is string => Boolean(path));
-  const { data: signedUrls } = imagePaths.length
-    ? await supabase.storage.from("wardrobe-private").createSignedUrls(imagePaths, 3600)
-    : { data: [] };
-  const signedUrlByPath = new Map((signedUrls ?? []).map((entry) => [entry.path, entry.signedUrl]));
-  const signedItems = (items ?? []).map((item) => {
-    const path = item.thumbnail_path || item.original_image_path;
-    return { ...item, imageUrl: path ? signedUrlByPath.get(path) ?? null : null };
-  });
-
-  return (
-    <section className="wardrobe-page">
-      <div className="page-heading">
-        <div><span className="eyebrow">个人空间</span><h1>我的衣橱</h1></div>
-        <div className="heading-actions"><Link className="button primary" href="/wardrobe/new">添加单品</Link><form action={logout}><button className="text-button">退出登录</button></form></div>
-      </div>
-      {message && <div className="notice success wardrobe-notice">{message}</div>}
-      <div className="summary-grid">
-        {(Object.keys(counts) as Array<keyof typeof counts>).map((key) => (
-          <div className="summary-card" key={key}><strong>{counts[key]}</strong><span>{labels[key]}</span></div>
-        ))}
-      </div>
-      {(items?.length ?? 0) === 0 ? (
-        <div className="empty-state"><div className="empty-icon">＋</div><h2>衣橱还是空的</h2><p>从一张清晰的平铺图或衣架图开始。</p><Link className="button primary" href="/wardrobe/new">添加第一件单品</Link></div>
-      ) : (
-        <div className="item-grid">{signedItems.map((item) => <article className="item-card" key={item.id}><div className="item-photo">{item.imageUrl ? <Image src={item.imageUrl} alt={item.name} fill sizes="(max-width: 700px) 50vw, 25vw" style={{ objectFit: "contain" }} unoptimized /> : null}</div><strong>{item.name}</strong><span>{labels[item.category as keyof typeof labels]} · {item.primary_color}</span></article>)}</div>
-      )}
-    </section>
-  );
+  const { data: items } = await supabase.from("wardrobe_items")
+    .select("id,name,category,primary_color,sort_order")
+    .is("deleted_at", null).order("category").order("sort_order").order("created_at", { ascending: false });
+  const params = await searchParams;
+  return <section className="wardrobe-page management-page">
+    <div className="page-heading"><div><span className="eyebrow">WARDROBE</span><h1>我的衣橱</h1><p>分类浏览、调整顺序，点开单品即可修改或删除。</p></div><div className="heading-actions"><Link className="button primary" href="/wardrobe/new">添加单品</Link><form action={logout}><button className="text-button">退出登录</button></form></div></div>
+    <nav className="wardrobe-tabs"><Link className="active" href="/wardrobe">衣橱</Link><Link href="/wardrobe/inspiration">穿搭灵感</Link><Link href="/wardrobe/settings">账号设置</Link></nav>
+    {params.message && <div className="notice success wardrobe-notice">{params.message}</div>}
+    {params.error && <div className="notice error wardrobe-notice">{params.error}</div>}
+    {(items?.length ?? 0) === 0 ? <div className="empty-state"><h2>衣橱还是空的</h2><p>从一张清晰的单品图开始。</p><Link className="button primary" href="/wardrobe/new">添加第一件单品</Link></div> : <WardrobeManager items={(items ?? []) as ManagedItem[]} />}
+  </section>;
 }

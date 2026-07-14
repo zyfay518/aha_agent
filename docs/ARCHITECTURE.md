@@ -409,3 +409,12 @@ aha_agent/
 - `docs/specs/ACCEPTANCE_CASES.md`：阶段 0 形成的验收测试基线。
 
 实现代码若与详细规格不一致，应先记录差异和原因，再更新规格，不能让文档静默失效。
+
+## 15. MVP 管理与生产保护（2026-07-14）
+
+- `wardrobe_items.sort_order` 保存用户在每个大类中的陈列顺序；`web_reorder_wardrobe_items` 验证所有 ID 属于当前登录用户且同属一个分类后原子更新。
+- `/wardrobe` 使用左侧分类、右侧缩略图；`/wardrobe/[id]` 负责标签修改与删除确认；`/wardrobe/inspiration` 仅预留场合、季节、风格结构。
+- 登录网页通过 RLS 更新自身数据。Agent MCP 不再暴露修改与删除工具，旧 RPC 的匿名和登录角色权限已撤销。
+- `/wardrobe/settings` 撤销 Agent 访问码、OAuth grant 与只读链接；删除账号时先通过 Storage API 删除对象，再由事务函数清除业务数据、数据库图片和 Auth 用户。
+- `private.mcp_rate_limits` 按用户、工具和分钟计数；高负载图片工具使用更低阈值。MCP 日志仅记录请求 ID、工具、结果、错误码和耗时，不记录访问码或图片内容。
+- `scripts/mcp-smoke-test.mjs` 校验工具契约、敏感工具缺席、稳定安全链接、减少购物规则及对话内 JPEG 穿搭图。

@@ -61,20 +61,6 @@ const tools = [
     _meta: { ui: { resourceUri: wardrobeResourceUri }, "openai/outputTemplate": wardrobeResourceUri },
   },
   {
-    name: "update_wardrobe_item",
-    title: "修改衣橱单品",
-    description: "Use this to update one exact wardrobe item after the user identifies the item and states the changes.",
-    inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_id", "patch"], properties: { access_code: { type: "string" }, item_id: { type: "string", format: "uuid" }, patch: { type: "object", minProperties: 1, additionalProperties: false, properties: { name: { type: "string" }, category: { type: "string", enum: ["top", "bottom", "shoes", "bag"] }, subcategory: { type: "string" }, primary_color: { type: "string" }, secondary_color: { type: ["string", "null"] }, season_tags: { type: "array", items: { type: "string" } } } } } },
-    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false, idempotentHint: true },
-  },
-  {
-    name: "delete_wardrobe_item",
-    title: "删除衣橱单品",
-    description: "Use this only after the user explicitly confirms deletion of one exact wardrobe item.",
-    inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_id", "confirmed"], properties: { access_code: { type: "string" }, item_id: { type: "string", format: "uuid" }, confirmed: { type: "boolean", const: true } } },
-    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: true },
-  },
-  {
     name: "get_wardrobe_summary",
     title: "获取衣橱概览",
     description: "Use this when the user asks to see or open the wardrobe. Return only wardrobe_url as a clickable link, with no inventory, explanation, or extra prose unless the user explicitly asks for a text summary. The URL is stable for this user.",
@@ -94,6 +80,13 @@ const tools = [
     title: "生成图片穿搭板",
     description: "Create and directly display a visual outfit-board image from 1–5 exact wardrobe item IDs selected by the host agent. Show the returned image in the conversation. Do not send outfit_url unless inline image rendering is unavailable.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_ids"], properties: { access_code: { type: "string" }, item_ids: { type: "array", minItems: 1, maxItems: 5, items: { type: "string", format: "uuid" } }, title: { type: "string", maxLength: 40 } } },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
+  },
+  {
+    name: "check_purchase_gap",
+    title: "检查是否确实缺少单品",
+    description: "Mandatory before suggesting any purchase. Returns may_suggest_purchase=false whenever the wardrobe already contains every required category. If false, do not recommend buying anything.",
+    inputSchema: { type: "object", additionalProperties: false, required: ["access_code"], properties: { access_code: { type: "string" }, required_categories: { type: "array", minItems: 1, maxItems: 4, uniqueItems: true, items: { type: "string", enum: ["top", "bottom", "shoes", "bag"] } } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
   },
 ] as const;
@@ -116,6 +109,9 @@ async function callTool(name: string, args: Record<string, unknown>) {
   const supabase = getPublicSupabaseClient();
   const accessCode=String(args.access_code??"");
   const origin=process.env.NEXT_PUBLIC_APP_URL||"https://aha-agent.vercel.app";
+  const {data:rate,error:rateError}=await supabase.rpc("agent_consume_rate_limit",{p_access_code:accessCode,p_tool_name:name});
+  if(rateError)throw new Error(rateError.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"RATE_LIMIT_CHECK_FAILED");
+  if(!(rate as {allowed?:boolean})?.allowed)throw new Error("RATE_LIMITED");
   if(name==="attach_item_image"){
     let bytes:Buffer;
     let mime:string;
@@ -156,6 +152,14 @@ async function callTool(name: string, args: Record<string, unknown>) {
     const title=encodeURIComponent(boardTitle);
     return {outfit_url:`${origin}/outfit/${viewId}?items=${ids.join(",")}&title=${title}`,item_ids:ids,item_names:selected.map(item=>item.name),image_base64:board.toString("base64"),image_mime_type:"image/jpeg"};
   }
+  if(name==="check_purchase_gap"){
+    const required=Array.isArray(args.required_categories)&&args.required_categories.length?args.required_categories.map(String):["top","bottom"];
+    const {data,error}=await supabase.rpc("agent_get_wardrobe_summary",{p_access_code:accessCode});
+    if(error)throw new Error(error.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"TOOL_EXECUTION_FAILED");
+    const counts=(data as {counts?:Record<string,number>})?.counts??{};
+    const missing=required.filter(category=>(counts[category]??0)<1);
+    return {may_suggest_purchase:missing.length>0,missing_categories:missing.slice(0,1),reason:missing.length?"衣橱缺少完成这套搭配所需的类别；只可提示一个缺口，不提供商店或购买链接。":"现有衣橱已覆盖所需类别，应优先用已有单品搭配，不建议购买。"};
+  }
   let operation: string;
   let params: Record<string, unknown>;
 
@@ -163,10 +167,6 @@ async function callTool(name: string, args: Record<string, unknown>) {
     case "verify_access": operation = "agent_verify_access"; params = { p_access_code: args.access_code }; break;
     case "add_wardrobe_item": operation = "agent_add_wardrobe_item"; params = { p_access_code: args.access_code, p_idempotency_key: args.idempotency_key, p_name: args.name, p_category: args.category, p_subcategory: args.subcategory, p_colors: args.colors, p_seasons: args.seasons }; break;
     case "list_wardrobe_items": operation = "agent_list_wardrobe_items"; params = { p_access_code: args.access_code, p_category: args.category ?? null, p_limit: args.limit ?? 50 }; break;
-    case "update_wardrobe_item": operation = "agent_update_wardrobe_item"; params = { p_access_code: args.access_code, p_item_id: args.item_id, p_patch: args.patch }; break;
-    case "delete_wardrobe_item":
-      if (args.confirmed !== true) throw new Error("DELETE_CONFIRMATION_REQUIRED");
-      operation = "agent_delete_wardrobe_item"; params = { p_access_code: args.access_code, p_item_id: args.item_id }; break;
     case "get_wardrobe_summary": operation = "agent_get_wardrobe_summary"; params = { p_access_code: args.access_code }; break;
     default: throw new Error("TOOL_NOT_FOUND");
   }
@@ -175,7 +175,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
   if (error) throw new Error(error.message.includes("INVALID_ACCESS_CODE") ? "INVALID_ACCESS_CODE" : error.message.includes("ITEM_NOT_FOUND") ? "ITEM_NOT_FOUND" : "TOOL_EXECUTION_FAILED");
   if(name==="get_wardrobe_summary"||name==="list_wardrobe_items"){
     const viewId=await getWardrobeViewId(supabase,accessCode);
-    return {...data,wardrobe_url:`${origin}/closet/${viewId}`};
+    return {...data,wardrobe_url:`${origin}/closet/${viewId}`,management_url:`${origin}/wardrobe`};
   }
   return data;
 }
@@ -197,8 +197,11 @@ export async function POST(request: Request) {
   if (body.method === "tools/call") {
     const name = body.params?.name;
     if (!name) return jsonRpcError(body.id, -32602, "Missing tool name");
+    const requestId=crypto.randomUUID();
+    const started=Date.now();
     try {
       const data = await callTool(name, body.params?.arguments ?? {});
+      console.info(JSON.stringify({event:"mcp_tool_call",request_id:requestId,tool:name,outcome:"success",duration_ms:Date.now()-started}));
       if(name==="create_outfit_board"&&typeof (data as {image_base64?:unknown}).image_base64==="string"){
         const imageData=String((data as {image_base64:string}).image_base64);
         const mimeType=String((data as {image_mime_type?:string}).image_mime_type||"image/jpeg");
@@ -212,6 +215,7 @@ export async function POST(request: Request) {
       return jsonRpc(body.id, { content: [{ type: "text", text }], structuredContent: data });
     } catch (error) {
       const message = error instanceof Error ? error.message : "TOOL_EXECUTION_FAILED";
+      console.warn(JSON.stringify({event:"mcp_tool_call",request_id:requestId,tool:name,outcome:"error",error_code:message,duration_ms:Date.now()-started}));
       return jsonRpc(body.id, { isError: true, content: [{ type: "text", text: message }] });
     }
   }
