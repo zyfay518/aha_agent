@@ -101,6 +101,12 @@ function rpcClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } });
 }
 
+async function getWardrobeViewId(supabase:ReturnType<typeof rpcClient>,accessCode:string){
+  const {data,error}=await supabase.rpc("agent_get_or_create_wardrobe_view",{p_access_code:accessCode});
+  if(error||typeof data!=="string")throw new Error(error?.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"VIEW_LINK_FAILED");
+  return data;
+}
+
 function jsonRpc(id: JsonRpcRequest["id"], result: unknown, status = 200) {
   return Response.json({ jsonrpc: "2.0", id: id ?? null, result }, { status, headers: corsHeaders });
 }
@@ -140,8 +146,9 @@ async function callTool(name: string, args: Record<string, unknown>) {
     if(error)throw new Error(error.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"TOOL_EXECUTION_FAILED");
     const owned=new Set((data?.items??[]).map((item:{id:string})=>item.id));
     if(!ids.length||ids.some(id=>!owned.has(id)))throw new Error("ITEM_NOT_FOUND");
+    const viewId=await getWardrobeViewId(supabase,accessCode);
     const title=encodeURIComponent(String(args.title||"今日穿搭灵感"));
-    return {outfit_url:`${origin}/outfit/${encodeURIComponent(accessCode)}?items=${ids.join(",")}&title=${title}`,item_ids:ids};
+    return {outfit_url:`${origin}/outfit/${viewId}?items=${ids.join(",")}&title=${title}`,item_ids:ids};
   }
   let operation: string;
   let params: Record<string, unknown>;
@@ -160,8 +167,10 @@ async function callTool(name: string, args: Record<string, unknown>) {
 
   const { data, error } = await supabase.rpc(operation, params);
   if (error) throw new Error(error.message.includes("INVALID_ACCESS_CODE") ? "INVALID_ACCESS_CODE" : error.message.includes("ITEM_NOT_FOUND") ? "ITEM_NOT_FOUND" : "TOOL_EXECUTION_FAILED");
-  if(name==="get_wardrobe_summary")return {...data,wardrobe_url:`${origin}/closet/${encodeURIComponent(accessCode)}`};
-  if(name==="list_wardrobe_items")return {...data,wardrobe_url:`${origin}/closet/${encodeURIComponent(accessCode)}`};
+  if(name==="get_wardrobe_summary"||name==="list_wardrobe_items"){
+    const viewId=await getWardrobeViewId(supabase,accessCode);
+    return {...data,wardrobe_url:`${origin}/closet/${viewId}`};
+  }
   return data;
 }
 

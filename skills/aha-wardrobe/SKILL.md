@@ -32,7 +32,7 @@ Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 - Call `update_wardrobe_item` only after identifying one exact item.
 - Require explicit confirmation immediately before `delete_wardrobe_item`.
 - Call `get_wardrobe_summary` when the user asks for an overview.
-- When the user asks to see or open the wardrobe, call `get_wardrobe_summary` and reply with only its stable `wardrobe_url` as a clickable link. Do not add item counts, inventory, explanations, apologies, or other prose unless the user explicitly requests a text summary.
+- When the user asks to see or open the wardrobe, call `get_wardrobe_summary` and reply with only its stable `wardrobe_url` as a clickable link. The URL contains a separate read-only view UUID, never the `AHA-...` access code. Do not add item counts, inventory, explanations, apologies, or other prose unless the user explicitly requests a text summary.
 
 ## Recommend outfits
 

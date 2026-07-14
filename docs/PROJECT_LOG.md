@@ -239,6 +239,15 @@
 - 修复与生产回归完成：三件测试单品均已回写白底主体图，包含此前缺图的白红背心；线上图片全部为 1200×1200 JPEG，且不再包含商品页截图。
 - 固定链接回归通过：连续两次摘要调用得到同一 `wardrobe_url`，工具文本内容严格等于该链接，当前衣橱总数为 3。
 - 代码已部署至生产，提交 `d048c08`；ESLint、TypeScript 和 Next.js 生产构建全部通过。
+
+### 2026-07-14 — 公开衣橱链接与操作访问码分离
+
+- 验收发现固定衣橱链接直接包含 `AHA-...` 操作访问码，Agent 因敏感凭证泄露风险拒绝显示。
+- 新增每用户稳定、可撤销的只读 `view_id`；公开衣橱和穿搭链接只包含 UUID，不再包含 Agent 操作访问码。
+- 只读 UUID 仅可列出对应衣橱和读取对应图片，不能用于新增、修改、删除或图片写入；伪造 UUID 返回 404。
+- 旧的访问码式公开页面停止工作，避免历史模式继续暴露读写凭证。
+- Supabase 安全检查已运行。`private.wardrobe_view_links` 启用 RLS、无直接角色授权，只有三条显式 RPC 暴露；匿名 `SECURITY DEFINER` 警告属于当前“高熵令牌校验后服务数据”的已知 MVP 边界，后续 OAuth/API 网关阶段迁出公开 RPC。
+- 本机 Supabase CLI 2.109.1 因当前 x64 环境触发 `SIGILL`，因此本次已应用 SQL 以 `docs/sql/wardrobe_read_only_view_links.sql` 留档，而未生成 CLI migration history。
 - 补充 Codex 图片闭环：`attach_item_image` 除临时 HTTPS 地址外，也接受本地编辑结果的 Base64；列表增加 `has_image`，新增后必须回查为真。
 - 再次用 Agent 图片编辑能力生成藏青背心和黑色泳裤白底目录图并覆盖旧商品页截图；白红背心原有白底图保留。
 - 删除 `.env.example` 中 OpenAI API Key 与模型配置；后端不再需要模型额度。
