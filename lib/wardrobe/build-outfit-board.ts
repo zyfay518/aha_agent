@@ -2,21 +2,18 @@ import sharp from "sharp";
 
 type OutfitBoardItem = {
   name: string;
-  category: "top"|"bottom"|"shoes"|"bag";
   image: Buffer;
 };
-
-const categoryLabels={top:"TOP",bottom:"BOTTOM",shoes:"SHOES",bag:"BAG"} as const;
 
 export async function buildOutfitBoard(items:OutfitBoardItem[]){
   const columns=items.length===1?1:2;
   const rows=Math.ceil(items.length/columns);
   const width=1200;
   const cellWidth=500;
-  const cellHeight=500;
+  const cellHeight=430;
   const gap=40;
-  const top=170;
-  const height=top+rows*cellHeight+90;
+  const top=100;
+  const height=top+rows*cellHeight+70;
   const totalWidth=columns*cellWidth+(columns-1)*gap;
   const left=(width-totalWidth)/2;
 
@@ -32,22 +29,17 @@ export async function buildOutfitBoard(items:OutfitBoardItem[]){
       .jpeg({quality:92})
       .toBuffer();
     composites.push({
-      input:Buffer.from(`<svg width="${cellWidth}" height="450"><rect width="${cellWidth}" height="450" rx="26" fill="#ffffff" stroke="#dedbd1" stroke-width="2"/></svg>`),
+      input:Buffer.from(`<svg width="${cellWidth}" height="410"><rect width="${cellWidth}" height="410" rx="26" fill="#ffffff" stroke="#dedbd1" stroke-width="2"/></svg>`),
       left:x,
       top:y,
     });
     composites.push({input:image,left:x+40,top:y+24});
-    composites.push({
-      input:Buffer.from(`<svg width="${cellWidth}" height="48"><text x="${cellWidth/2}" y="31" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="3" fill="#63735b">${categoryLabels[items[index].category]}</text></svg>`),
-      left:x,
-      top:y+393,
-    });
   }
 
   composites.unshift({
-    input:Buffer.from(`<svg width="${width}" height="150"><text x="600" y="55" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="5" fill="#63735b">AHA OUTFIT</text><text x="600" y="116" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" letter-spacing="4" fill="#252521">TODAY'S LOOK</text></svg>`),
+    input:Buffer.from(`<svg width="${width}" height="80"><circle cx="566" cy="40" r="7" fill="#63735b"/><rect x="584" y="34" width="50" height="12" rx="6" fill="#63735b"/><circle cx="652" cy="40" r="7" fill="#63735b"/></svg>`),
     left:0,
-    top:20,
+    top:10,
   });
 
   return sharp({create:{width,height,channels:3,background:"#f8f5ea"}})

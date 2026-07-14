@@ -154,7 +154,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
     const imageResults=await Promise.all(selected.map(async(item)=>{
       const result=await supabase.rpc("agent_get_item_image",{p_access_code:accessCode,p_item_id:item.id});
       if(result.error||typeof result.data?.base64!=="string")throw new Error("IMAGE_NOT_FOUND");
-      return {name:item.name,category:item.category,image:Buffer.from(result.data.base64,"base64")};
+      return {name:item.name,image:Buffer.from(result.data.base64,"base64")};
     }));
     const viewId=await getWardrobeViewId(supabase,accessCode);
     const boardTitle=String(args.title||"今日穿搭灵感");
