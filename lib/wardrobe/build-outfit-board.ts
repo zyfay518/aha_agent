@@ -1,47 +1,80 @@
 import sharp from "sharp";
 
+export type OutfitBoardCategory = "top" | "bottom" | "shoes" | "bag";
+
 type OutfitBoardItem = {
   name: string;
+  category: OutfitBoardCategory;
   image: Buffer;
 };
 
-export async function buildOutfitBoard(items:OutfitBoardItem[]){
-  const columns=items.length===1?1:2;
-  const rows=Math.ceil(items.length/columns);
-  const width=1200;
-  const cellWidth=500;
-  const cellHeight=430;
-  const gap=40;
-  const top=100;
-  const height=top+rows*cellHeight+70;
-  const totalWidth=columns*cellWidth+(columns-1)*gap;
-  const left=(width-totalWidth)/2;
+type Slot = { x: number; y: number; width: number; height: number };
 
-  const itemComposites=await Promise.all(items.map(async(item,index)=>{
-    const column=index%columns;
-    const row=Math.floor(index/columns);
-    const x=Math.round(left+column*(cellWidth+gap));
-    const y=top+row*cellHeight;
-    const image=await sharp(item.image)
-      .flatten({background:"#ffffff"})
-      .resize(420,370,{fit:"contain",background:"#ffffff"})
-      .jpeg({quality:92})
-      .toBuffer();
-    return [{
-      input:Buffer.from(`<svg width="${cellWidth}" height="410"><rect width="${cellWidth}" height="410" rx="26" fill="#ffffff" stroke="#dedbd1" stroke-width="2"/></svg>`),
-      left:x,
-      top:y,
-    },{input:image,left:x+40,top:y+24}] satisfies sharp.OverlayOptions[];
-  }));
+const canvasSize = 1200;
+const categoryOrder: Record<OutfitBoardCategory, number> = { top: 0, bottom: 1, shoes: 2, bag: 3 };
 
-  const composites:sharp.OverlayOptions[]=[{
-    input:Buffer.from(`<svg width="${width}" height="80"><circle cx="566" cy="40" r="7" fill="#63735b"/><rect x="584" y="34" width="50" height="12" rx="6" fill="#63735b"/><circle cx="652" cy="40" r="7" fill="#63735b"/></svg>`),
-    left:0,
-    top:10,
-  },...itemComposites.flat()];
+const layouts: Record<number, Slot[]> = {
+  1: [{ x: 170, y: 140, width: 860, height: 900 }],
+  2: [
+    { x: 75, y: 155, width: 500, height: 820 },
+    { x: 625, y: 120, width: 500, height: 860 },
+  ],
+  3: [
+    { x: 65, y: 70, width: 500, height: 570 },
+    { x: 625, y: 55, width: 510, height: 665 },
+    { x: 145, y: 735, width: 620, height: 375 },
+  ],
+  4: [
+    { x: 60, y: 65, width: 500, height: 535 },
+    { x: 625, y: 45, width: 515, height: 630 },
+    { x: 65, y: 700, width: 610, height: 390 },
+    { x: 720, y: 710, width: 390, height: 380 },
+  ],
+  5: [
+    { x: 50, y: 55, width: 500, height: 585 },
+    { x: 635, y: 40, width: 515, height: 570 },
+    { x: 55, y: 735, width: 570, height: 360 },
+    { x: 700, y: 615, width: 405, height: 320 },
+    { x: 655, y: 940, width: 480, height: 210 },
+  ],
+};
 
-  return sharp({create:{width,height,channels:3,background:"#f8f5ea"}})
+const categoryScale: Record<OutfitBoardCategory, number> = {
+  top: 0.9,
+  bottom: 1,
+  shoes: 0.82,
+  bag: 0.78,
+};
+
+async function prepareItem(item: OutfitBoardItem, slot: Slot) {
+  const scale = categoryScale[item.category];
+  const maxWidth = Math.round(slot.width * scale);
+  const maxHeight = Math.round(slot.height * (item.category === "shoes" ? 0.72 : scale));
+  const trimmed = sharp(item.image, { limitInputPixels: 40_000_000 })
+    .flatten({ background: "#ffffff" })
+    .trim({ background: "#ffffff", threshold: 12 });
+  const image = await trimmed
+    .resize(maxWidth, maxHeight, { fit: "inside", withoutEnlargement: false })
+    .jpeg({ quality: 94, chromaSubsampling: "4:4:4" })
+    .toBuffer({ resolveWithObject: true });
+  return {
+    input: image.data,
+    left: Math.round(slot.x + (slot.width - image.info.width) / 2),
+    top: Math.round(slot.y + (slot.height - image.info.height) / 2),
+  } satisfies sharp.OverlayOptions;
+}
+
+export async function buildOutfitBoard(items: OutfitBoardItem[]) {
+  if (items.length < 1 || items.length > 5) throw new Error("OUTFIT_ITEM_COUNT_INVALID");
+  const arranged = items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => categoryOrder[a.item.category] - categoryOrder[b.item.category] || a.index - b.index)
+    .map(({ item }) => item);
+  const slots = layouts[arranged.length];
+  const composites = await Promise.all(arranged.map((item, index) => prepareItem(item, slots[index])));
+
+  return sharp({ create: { width: canvasSize, height: canvasSize, channels: 3, background: "#ffffff" } })
     .composite(composites)
-    .jpeg({quality:90,chromaSubsampling:"4:4:4"})
+    .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
     .toBuffer();
 }

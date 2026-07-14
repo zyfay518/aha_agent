@@ -78,7 +78,7 @@ const tools = [
   {
     name: "create_outfit_board",
     title: "生成图片穿搭板",
-    description: "Create and directly display a visual outfit-board image from 1–5 exact wardrobe item IDs selected by the host agent. Show the returned image in the conversation. Do not send outfit_url unless inline image rendering is unavailable.",
+    description: "Create and directly display a square 1200×1200 pure-white outfit-board image from 1–5 exact wardrobe item IDs selected by the host agent. The clean layout keeps garments visually dominant and shoes or bags proportionally smaller. Show the returned image in the conversation. Do not send outfit_url unless inline image rendering is unavailable.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_ids"], properties: { access_code: { type: "string" }, item_ids: { type: "array", minItems: 1, maxItems: 5, items: { type: "string", format: "uuid" } }, title: { type: "string", maxLength: 40 } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
   },
@@ -145,7 +145,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
     const source=data as {view_id?:unknown;items?:unknown};
     const selected=Array.isArray(source?.items)?source.items as BoardSourceItem[]:[];
     if(typeof source?.view_id!=="string"||selected.length!==ids.length||selected.some(item=>typeof item.base64!=="string"))throw new Error("IMAGE_NOT_FOUND");
-    const imageResults=selected.map(item=>({name:item.name,image:Buffer.from(item.base64,"base64")}));
+    const imageResults=selected.map(item=>({name:item.name,category:item.category,image:Buffer.from(item.base64,"base64")}));
     const viewId=source.view_id;
     const boardTitle=String(args.title||"今日穿搭灵感");
     const board=await buildOutfitBoard(imageResults);

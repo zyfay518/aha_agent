@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import sharp from "sharp";
 
 const endpoint = process.env.AHA_MCP_URL || "http://localhost:3000/mcp";
 let id = 0;
@@ -42,6 +43,9 @@ if (code) {
     assert.equal(board.content[0].type, "image");
     assert.equal(board.content[0].mimeType, "image/jpeg");
     assert(!JSON.stringify(board.content).includes("http"), "outfit response should render image inline");
+    const metadata = await sharp(Buffer.from(board.content[0].data, "base64")).metadata();
+    assert.equal(metadata.width, 1200, "outfit board must be square");
+    assert.equal(metadata.height, 1200, "outfit board must be square");
   }
 }
 
