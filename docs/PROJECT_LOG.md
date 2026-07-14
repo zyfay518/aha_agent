@@ -248,6 +248,9 @@
 - 旧的访问码式公开页面停止工作，避免历史模式继续暴露读写凭证。
 - Supabase 安全检查已运行。`private.wardrobe_view_links` 启用 RLS、无直接角色授权，只有三条显式 RPC 暴露；匿名 `SECURITY DEFINER` 警告属于当前“高熵令牌校验后服务数据”的已知 MVP 边界，后续 OAuth/API 网关阶段迁出公开 RPC。
 - 本机 Supabase CLI 2.109.1 因当前 x64 环境触发 `SIGILL`，因此本次已应用 SQL 以 `docs/sql/wardrobe_read_only_view_links.sql` 留档，而未生成 CLI migration history。
+- 生产回归通过：MCP 摘要和穿搭链接均不含 `AHA-...`，只含同一个稳定只读 UUID；安全衣橱页面返回 200，旧访问码链接和伪造 UUID 均返回 404。
+- 生产衣橱 HTML 无 `?code=` 或访问码残留，展示 3 个单品卡片；三张只读图片接口均返回 `200 image/jpeg`。
+- 修复代码已部署，提交 `38ce659`。
 - 补充 Codex 图片闭环：`attach_item_image` 除临时 HTTPS 地址外，也接受本地编辑结果的 Base64；列表增加 `has_image`，新增后必须回查为真。
 - 再次用 Agent 图片编辑能力生成藏青背心和黑色泳裤白底目录图并覆盖旧商品页截图；白红背心原有白底图保留。
 - 删除 `.env.example` 中 OpenAI API Key 与模型配置；后端不再需要模型额度。
