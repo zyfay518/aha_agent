@@ -20,11 +20,17 @@ export default async function WardrobePage({ searchParams }: { searchParams: Pro
   const counts = { top: 0, bottom: 0, shoes: 0, bag: 0 };
   for (const item of items ?? []) counts[item.category as keyof typeof counts] += 1;
   const { message } = await searchParams;
-  const signedItems = await Promise.all((items ?? []).map(async (item) => {
+  const imagePaths = (items ?? [])
+    .map((item) => item.thumbnail_path || item.original_image_path)
+    .filter((path): path is string => Boolean(path));
+  const { data: signedUrls } = imagePaths.length
+    ? await supabase.storage.from("wardrobe-private").createSignedUrls(imagePaths, 3600)
+    : { data: [] };
+  const signedUrlByPath = new Map((signedUrls ?? []).map((entry) => [entry.path, entry.signedUrl]));
+  const signedItems = (items ?? []).map((item) => {
     const path = item.thumbnail_path || item.original_image_path;
-    const { data } = await supabase.storage.from("wardrobe-private").createSignedUrl(path, 3600);
-    return { ...item, imageUrl: data?.signedUrl ?? null };
-  }));
+    return { ...item, imageUrl: path ? signedUrlByPath.get(path) ?? null : null };
+  });
 
   return (
     <section className="wardrobe-page">

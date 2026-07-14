@@ -6,7 +6,11 @@ export async function normalizeItemImage(bytes: Buffer, mimeType: string) {
   if (!supportedTypes.has(mimeType)) throw new Error("UNSUPPORTED_IMAGE_TYPE");
   if (bytes.length > 8 * 1024 * 1024) throw new Error("IMAGE_TOO_LARGE");
 
-  const output = await sharp(bytes, { failOn: "warning" })
+  const output = await sharp(bytes, {
+    failOn: "warning",
+    limitInputPixels: 40_000_000,
+    sequentialRead: true,
+  })
     .rotate()
     .flatten({ background: "#ffffff" })
     .resize(1200, 1200, {

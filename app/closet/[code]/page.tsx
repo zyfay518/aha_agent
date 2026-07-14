@@ -1,6 +1,6 @@
 import Image from "next/image";
 import {notFound} from "next/navigation";
-import {createClient} from "@supabase/supabase-js";
+import {getPublicSupabaseClient} from "@/lib/supabase/public-server";
 
 const categories=[
   {key:"top",label:"上装"},
@@ -15,7 +15,7 @@ type WardrobeItem={id:string;name:string;category:Category;primary_color:string}
 export default async function Closet({params}:{params:Promise<{code:string}>}){
   const {code:viewId}=await params;
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(viewId))notFound();
-  const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,{auth:{persistSession:false}});
+  const supabase=getPublicSupabaseClient();
   const {data,error}=await supabase.rpc("view_list_wardrobe_items",{p_view_id:viewId,p_limit:50});
   if(error)notFound();
   const items:WardrobeItem[]=data?.items??[];

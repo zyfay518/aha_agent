@@ -375,7 +375,32 @@ aha_agent/
 
 所有重要变化还需在 `PROJECT_LOG.md` 追加对应决策或变更记录。
 
-## 13. 详细规格索引
+## 13. 当前生产性能与存储策略（2026-07-14）
+
+### 已实施的兼容性优化
+
+- 服务端匿名 Supabase 客户端使用进程内惰性单例，避免每个 MCP、只读衣橱和图片请求重复创建客户端；不会保存用户登录会话。
+- `create_outfit_board` 通过 `agent_get_outfit_source` 一次取得已校验单品、白底图和稳定只读 `view_id`。原先需要“列表 + 每件图片 + view_id”的 `N + 2` 次 Supabase 请求，现在固定为 1 次。
+- 穿搭板内各单品的 Sharp 缩放并行执行，同时保持输入顺序与最终版式不变。
+- 登录后的备份衣橱页面使用 `createSignedUrls` 批量申请图片签名地址，由每件一次 Storage 请求降为整页一次。
+- 为 `agent_access_tokens.user_id` 和 `agent_item_images.user_id` 补充外键覆盖索引；旧 RPC、旧索引与返回契约均保留。
+- 输入图片增加 4000 万像素解码上限和顺序读取，避免超大压缩图占用过多运行内存；现有 8 MB 文件大小限制和 1200×1200 JPEG 输出不变。
+
+### 当前图片存储现状
+
+- Agent 使用的白底主体图当前存于 `public.agent_item_images.image_bytes`（`bytea`）；MCP RPC 以 Base64 JSON 传输。
+- 备份网页上传的原图路径存于 `wardrobe_items`，文件位于私有 Storage bucket `wardrobe-private`。
+- 生产盘点时 3 张白底图原始字节共约 379 KB，但 `agent_item_images` 表总占用约 3.28 MB；Base64 传输还会比二进制增加约三分之一体积。
+- 本轮不迁移已上线图片，避免同时改写入、读取、回填和回滚路径而影响当前功能。用户增长前应迁移为：私有 Storage 保存规范化白底图，数据库只保存路径、尺寸、MIME、内容哈希与处理状态；MCP 按需读取对象或使用短期签名 URL。
+
+### 待规模增长后实施
+
+1. 白底图从数据库 `bytea` 迁移到私有 Storage，并提供双读、校验、回填和回滚期。
+2. 为列表接口加入游标分页；当前 50 件上限适合 MVP，不适合作为长期大衣橱方案。
+3. 增加请求耗时、RPC 错误率、图片处理峰值内存和 Storage/数据库占用监控。
+4. OAuth/API 网关上线时，将当前匿名可执行且内部校验高熵访问码的 RPC 迁出公开数据 API 边界。
+
+## 14. 详细规格索引
 
 - `docs/specs/UX_FLOWS.md`：页面、状态和用户流程。
 - `docs/specs/DATA_MODEL.md`：数据库、RLS、存储和删除流程。

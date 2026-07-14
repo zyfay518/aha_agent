@@ -1,6 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
 import { normalizeItemImage } from "@/lib/wardrobe/normalize-item-image";
 import { buildOutfitBoard } from "@/lib/wardrobe/build-outfit-board";
+import { getPublicSupabaseClient } from "@/lib/supabase/public-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,11 +98,7 @@ const tools = [
   },
 ] as const;
 
-function rpcClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { auth: { persistSession: false } });
-}
-
-async function getWardrobeViewId(supabase:ReturnType<typeof rpcClient>,accessCode:string){
+async function getWardrobeViewId(supabase:ReturnType<typeof getPublicSupabaseClient>,accessCode:string){
   const {data,error}=await supabase.rpc("agent_get_or_create_wardrobe_view",{p_access_code:accessCode});
   if(error||typeof data!=="string")throw new Error(error?.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"VIEW_LINK_FAILED");
   return data;
@@ -117,7 +113,7 @@ function jsonRpcError(id: JsonRpcRequest["id"], code: number, message: string, s
 }
 
 async function callTool(name: string, args: Record<string, unknown>) {
-  const supabase = rpcClient();
+  const supabase = getPublicSupabaseClient();
   const accessCode=String(args.access_code??"");
   const origin=process.env.NEXT_PUBLIC_APP_URL||"https://aha-agent.vercel.app";
   if(name==="attach_item_image"){
@@ -143,20 +139,18 @@ async function callTool(name: string, args: Record<string, unknown>) {
   }
   if(name==="create_outfit_board"){
     const ids=Array.isArray(args.item_ids)?args.item_ids.map(String):[];
-    const {data,error}=await supabase.rpc("agent_list_wardrobe_items",{p_access_code:accessCode,p_category:null,p_limit:50});
-    if(error)throw new Error(error.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"TOOL_EXECUTION_FAILED");
-    const owned=new Set((data?.items??[]).map((item:{id:string})=>item.id));
-    if(!ids.length||ids.some(id=>!owned.has(id)))throw new Error("ITEM_NOT_FOUND");
-    type BoardCategory="top"|"bottom"|"shoes"|"bag";
-    type BoardSourceItem={id:string;name:string;category:BoardCategory};
-    const wardrobeItems=(data?.items??[]) as BoardSourceItem[];
-    const selected=ids.map(id=>wardrobeItems.find(item=>item.id===id)).filter((item):item is BoardSourceItem=>Boolean(item));
-    const imageResults=await Promise.all(selected.map(async(item)=>{
-      const result=await supabase.rpc("agent_get_item_image",{p_access_code:accessCode,p_item_id:item.id});
-      if(result.error||typeof result.data?.base64!=="string")throw new Error("IMAGE_NOT_FOUND");
-      return {name:item.name,image:Buffer.from(result.data.base64,"base64")};
-    }));
-    const viewId=await getWardrobeViewId(supabase,accessCode);
+    if(!ids.length||ids.length>5||new Set(ids).size!==ids.length)throw new Error("ITEM_NOT_FOUND");
+    const {data,error}=await supabase.rpc("agent_get_outfit_source",{p_access_code:accessCode,p_item_ids:ids});
+    if(error){
+      const message=error.message;
+      throw new Error(message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":message.includes("ITEM_NOT_FOUND")||message.includes("VALIDATION_ERROR")?"ITEM_NOT_FOUND":"TOOL_EXECUTION_FAILED");
+    }
+    type BoardSourceItem={id:string;name:string;category:"top"|"bottom"|"shoes"|"bag";mime_type:string;base64:string};
+    const source=data as {view_id?:unknown;items?:unknown};
+    const selected=Array.isArray(source?.items)?source.items as BoardSourceItem[]:[];
+    if(typeof source?.view_id!=="string"||selected.length!==ids.length||selected.some(item=>typeof item.base64!=="string"))throw new Error("IMAGE_NOT_FOUND");
+    const imageResults=selected.map(item=>({name:item.name,image:Buffer.from(item.base64,"base64")}));
+    const viewId=source.view_id;
     const boardTitle=String(args.title||"今日穿搭灵感");
     const board=await buildOutfitBoard(imageResults);
     const title=encodeURIComponent(boardTitle);
