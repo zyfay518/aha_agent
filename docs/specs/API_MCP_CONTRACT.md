@@ -54,7 +54,7 @@ Web 成功响应：
 
 ## 4. MCP 工具
 
-MVP 对外暴露七个业务工具。图片既可通过宿主临时 URL，也可通过 Base64 传递；业务契约不依赖单一传输方式。
+MVP 对外暴露八个业务工具。图片既可通过 ChatGPT 文件参数、宿主临时 URL，也可通过 Base64 传递；业务契约不依赖单一传输方式。
 
 ### `verify_access`
 
@@ -99,6 +99,17 @@ MVP 对外暴露七个业务工具。图片既可通过宿主临时 URL，也可
 3. 图片编辑由当前 Agent 完成：移除人物、皮肤、头发、手、其他服饰和场景，输出正面纯白背景单品图。Aha 后端不调用图像模型。
 4. Agent 把白底预览和类别、季节、颜色一起展示给用户确认；确认后才执行 `add_wardrobe_item` 与 `attach_item_image`。
 5. 关键版型或图案无法从原图可靠恢复时停止流程，并要求更清晰照片；不得编造不可见设计。
+
+### `add_wardrobe_items_batch`
+
+用于一张平铺图或衣架图里 2–8 件清楚单品的批量保存。宿主先完成识别、逐件白底化、编号和统一确认，再调用一次该工具。
+
+- `items` 与图片数组必须等长并严格按编号对应。
+- ChatGPT 优先传 `files` 文件数组；临时 HTTPS 地址使用 `file_urls`；Codex 本地验收使用 `image_payloads`。
+- `_meta["openai/fileParams"]` 声明为 `files`。每个文件对象完整声明 `download_url`、`file_id`、`mime_type`、`file_name`，且只要求前两项。
+- `batch_idempotency_key` 保证重复调用不会重复创建。
+- 服务端并行下载并统一规格化图片，然后由数据库函数在同一事务里写入所有单品和图片。任意一件校验或写入失败，整批回滚。
+- 每分钟最多调用 6 次，每批最多 8 件。
 
 ### `list_wardrobe_items`
 

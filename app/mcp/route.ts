@@ -6,6 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type JsonRpcRequest = { jsonrpc?: string; id?: string | number | null; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } };
+type OpenAIFile = { download_url?: unknown; mime_type?: unknown };
+type BatchImagePayload = { image_base64?: unknown; mime_type?: unknown };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,6 +105,61 @@ const tools = [
     _meta: { "openai/fileParams": ["file"] },
   },
   {
+    name: "add_wardrobe_items_batch",
+    title: "批量加入已确认的衣橱单品",
+    description: "Use this only after the host agent has found 2–8 clearly separable garments in one photo, produced and shown one isolated white-background preview per garment, and the user has confirmed the complete numbered list. Files and items must use the same order. The server saves the whole batch in one database transaction; never claim partial success.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["access_code", "batch_idempotency_key", "items"],
+      anyOf: [{ required: ["files"] }, { required: ["file_urls"] }, { required: ["image_payloads"] }],
+      $defs: {
+        OpenAIFile: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            download_url: { type: "string" },
+            file_id: { type: "string" },
+            mime_type: { type: "string" },
+            file_name: { type: "string" },
+          },
+          required: ["download_url", "file_id"],
+        },
+        BatchItem: {
+          type: "object",
+          additionalProperties: false,
+          required: ["name", "category", "subcategory", "colors", "seasons"],
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 80 },
+            category: { type: "string", enum: ["top", "bottom", "shoes", "bag"] },
+            subcategory: { type: "string", minLength: 1, maxLength: 50 },
+            colors: { type: "array", minItems: 1, maxItems: 2, items: { type: "string" } },
+            seasons: { type: "array", maxItems: 4, items: { type: "string", enum: ["spring", "summer", "autumn", "winter", "all_season"] } },
+          },
+        },
+        ImagePayload: {
+          type: "object",
+          additionalProperties: false,
+          required: ["image_base64", "mime_type"],
+          properties: {
+            image_base64: { type: "string", minLength: 16 },
+            mime_type: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] },
+          },
+        },
+      },
+      properties: {
+        access_code: { type: "string" },
+        batch_idempotency_key: { type: "string", minLength: 8, maxLength: 100 },
+        items: { type: "array", minItems: 2, maxItems: 8, items: { $ref: "#/$defs/BatchItem" } },
+        files: { type: "array", minItems: 2, maxItems: 8, items: { $ref: "#/$defs/OpenAIFile" } },
+        file_urls: { type: "array", minItems: 2, maxItems: 8, items: { type: "string", format: "uri" } },
+        image_payloads: { type: "array", minItems: 2, maxItems: 8, items: { $ref: "#/$defs/ImagePayload" } },
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: true },
+    _meta: { "openai/fileParams": ["files"] },
+  },
+  {
     name: "create_outfit_board",
     title: "生成图片穿搭板",
     description: "Create and directly display a square 1200×1200 outfit-board image from 1–5 exact wardrobe item IDs selected by the host agent. It uses a clean light Morandi solid background, arranges tops above bottoms and shoes below, and places bags at the sides. Show the returned image in the conversation. Do not send outfit_url unless inline image rendering is unavailable.",
@@ -132,6 +189,27 @@ function jsonRpcError(id: JsonRpcRequest["id"], code: number, message: string, s
   return Response.json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } }, { status, headers: corsHeaders });
 }
 
+async function readAndNormalizeImage(source: OpenAIFile | BatchImagePayload | string) {
+  let bytes: Buffer;
+  let mime: string;
+  const downloadUrl = typeof source === "string" ? source : "download_url" in source && typeof source.download_url === "string" ? source.download_url : "";
+  if (downloadUrl) {
+    const url = new URL(downloadUrl);
+    if (url.protocol !== "https:") throw new Error("INVALID_IMAGE_URL");
+    const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error("IMAGE_DOWNLOAD_FAILED");
+    mime = (typeof source !== "string" && typeof source.mime_type === "string" ? source.mime_type : response.headers.get("content-type") || "").split(";")[0];
+    bytes = Buffer.from(await response.arrayBuffer());
+  } else {
+    const payload = source as BatchImagePayload;
+    mime = String(payload.mime_type ?? "");
+    const encoded = String(payload.image_base64 ?? "");
+    if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new Error("INVALID_IMAGE_BASE64");
+    bytes = Buffer.from(encoded, "base64");
+  }
+  return normalizeItemImage(bytes, mime);
+}
+
 async function callTool(name: string, args: Record<string, unknown>) {
   const supabase = getPublicSupabaseClient();
   const accessCode=String(args.access_code??"");
@@ -140,27 +218,29 @@ async function callTool(name: string, args: Record<string, unknown>) {
   if(rateError)throw new Error(rateError.message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":"RATE_LIMIT_CHECK_FAILED");
   if(!(rate as {allowed?:boolean})?.allowed)throw new Error("RATE_LIMITED");
   if(name==="attach_item_image"){
-    let bytes:Buffer;
-    let mime:string;
-    const chatgptFile=args.file&&typeof args.file==="object"?args.file as {download_url?:unknown;mime_type?:unknown}:null;
-    const downloadUrl=typeof chatgptFile?.download_url==="string"?chatgptFile.download_url:typeof args.file_url==="string"?args.file_url:"";
-    if(downloadUrl){
-      const url=new URL(downloadUrl);
-      if(url.protocol!=="https:")throw new Error("INVALID_IMAGE_URL");
-      const response=await fetch(url,{redirect:"follow",signal:AbortSignal.timeout(15000)});
-      if(!response.ok)throw new Error("IMAGE_DOWNLOAD_FAILED");
-      mime=(typeof chatgptFile?.mime_type==="string"?chatgptFile.mime_type:response.headers.get("content-type")||"").split(";")[0];
-      bytes=Buffer.from(await response.arrayBuffer());
-    }else{
-      mime=String(args.mime_type??"");
-      const encoded=String(args.image_base64??"");
-      if(!encoded||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))throw new Error("INVALID_IMAGE_BASE64");
-      bytes=Buffer.from(encoded,"base64");
-    }
-    const normalized=await normalizeItemImage(bytes,mime);
+    const chatgptFile=args.file&&typeof args.file==="object"?args.file as OpenAIFile:null;
+    const source = chatgptFile ?? (typeof args.file_url === "string" ? args.file_url : { image_base64: args.image_base64, mime_type: args.mime_type });
+    const normalized=await readAndNormalizeImage(source);
     const {data,error}=await supabase.rpc("agent_put_item_image",{p_access_code:accessCode,p_item_id:args.item_id,p_mime_type:normalized.mimeType,p_base64:normalized.bytes.toString("base64")});
     if(error)throw new Error(error.message.includes("ITEM_NOT_FOUND")?"ITEM_NOT_FOUND":"IMAGE_SAVE_FAILED");
     return {saved:Boolean(data),item_id:args.item_id};
+  }
+  if(name==="add_wardrobe_items_batch"){
+    const items=Array.isArray(args.items)?args.items as Record<string,unknown>[]:[];
+    const sources=Array.isArray(args.files)?args.files as OpenAIFile[]:Array.isArray(args.file_urls)?args.file_urls as string[]:Array.isArray(args.image_payloads)?args.image_payloads as BatchImagePayload[]:[];
+    if(items.length<2||items.length>8||sources.length!==items.length)throw new Error("BATCH_LENGTH_MISMATCH");
+    const normalized=await Promise.all(sources.map(readAndNormalizeImage));
+    const payload=items.map((item,index)=>({
+      ...item,
+      mime_type:normalized[index].mimeType,
+      image_base64:normalized[index].bytes.toString("base64"),
+    }));
+    const {data,error}=await supabase.rpc("agent_add_wardrobe_items_batch",{p_access_code:accessCode,p_batch_idempotency_key:args.batch_idempotency_key,p_items:payload});
+    if(error){
+      const message=error.message;
+      throw new Error(message.includes("INVALID_ACCESS_CODE")?"INVALID_ACCESS_CODE":message.includes("BATCH_CONFLICT")?"BATCH_CONFLICT":message.includes("VALIDATION_ERROR")?"VALIDATION_ERROR":"BATCH_SAVE_FAILED");
+    }
+    return data;
   }
   if(name==="create_outfit_board"){
     const ids=Array.isArray(args.item_ids)?args.item_ids.map(String):[];
