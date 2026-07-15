@@ -71,9 +71,36 @@ const tools = [
   {
     name: "attach_item_image",
     title: "保存白底服装主体图",
-    description: "Mandatory immediately after add_wardrobe_item. Attach the host-agent-produced catalog image containing only the clothing subject on a pure white background. Use file_url in ChatGPT or image_base64 plus mime_type when the host only has a local edited file. If this fails, do not claim the item was saved; retry or roll back the incomplete record.",
-    inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_id"], anyOf: [{ required: ["file_url"] }, { required: ["image_base64", "mime_type"] }], properties: { access_code: { type: "string" }, item_id: { type: "string", format: "uuid" }, file_url: { type: "string", format: "uri" }, image_base64: { type: "string", minLength: 16 }, mime_type: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] } } },
+    description: "Mandatory immediately after add_wardrobe_item. Attach only the user-confirmed, host-agent-produced catalog image containing one clothing subject on a pure white background. For try-on photos, the host must first remove the person and other garments, show the extracted preview, and obtain confirmation; never attach the original on-body photo. Prefer the standard ChatGPT file input, or use file_url/image_base64 fallbacks. If this fails, do not claim the item was saved.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["access_code", "item_id"],
+      anyOf: [{ required: ["file"] }, { required: ["file_url"] }, { required: ["image_base64", "mime_type"] }],
+      $defs: {
+        OpenAIFile: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            download_url: { type: "string" },
+            file_id: { type: "string" },
+            mime_type: { type: "string" },
+            file_name: { type: "string" },
+          },
+          required: ["download_url", "file_id"],
+        },
+      },
+      properties: {
+        access_code: { type: "string" },
+        item_id: { type: "string", format: "uuid" },
+        file: { $ref: "#/$defs/OpenAIFile" },
+        file_url: { type: "string", format: "uri" },
+        image_base64: { type: "string", minLength: 16 },
+        mime_type: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] },
+      },
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: true },
+    _meta: { "openai/fileParams": ["file"] },
   },
   {
     name: "create_outfit_board",
@@ -115,12 +142,14 @@ async function callTool(name: string, args: Record<string, unknown>) {
   if(name==="attach_item_image"){
     let bytes:Buffer;
     let mime:string;
-    if(typeof args.file_url==="string"&&args.file_url){
-      const url=new URL(args.file_url);
+    const chatgptFile=args.file&&typeof args.file==="object"?args.file as {download_url?:unknown;mime_type?:unknown}:null;
+    const downloadUrl=typeof chatgptFile?.download_url==="string"?chatgptFile.download_url:typeof args.file_url==="string"?args.file_url:"";
+    if(downloadUrl){
+      const url=new URL(downloadUrl);
       if(url.protocol!=="https:")throw new Error("INVALID_IMAGE_URL");
       const response=await fetch(url,{redirect:"follow",signal:AbortSignal.timeout(15000)});
       if(!response.ok)throw new Error("IMAGE_DOWNLOAD_FAILED");
-      mime=(response.headers.get("content-type")||"").split(";")[0];
+      mime=(typeof chatgptFile?.mime_type==="string"?chatgptFile.mime_type:response.headers.get("content-type")||"").split(";")[0];
       bytes=Buffer.from(await response.arrayBuffer());
     }else{
       mime=String(args.mime_type??"");

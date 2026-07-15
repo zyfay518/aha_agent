@@ -23,6 +23,11 @@ const names = listed.tools.map((entry) => entry.name);
 for (const required of ["verify_access", "add_wardrobe_item", "attach_item_image", "list_wardrobe_items", "get_wardrobe_summary", "create_outfit_board", "check_purchase_gap"]) assert(names.includes(required), `missing ${required}`);
 for (const forbidden of ["update_wardrobe_item", "delete_wardrobe_item"]) assert(!names.includes(forbidden), `${forbidden} must stay web-only`);
 for (const entry of listed.tools) assert(entry.annotations && typeof entry.annotations.readOnlyHint === "boolean", `${entry.name} annotations missing`);
+const attachTool = listed.tools.find((entry) => entry.name === "attach_item_image");
+assert.deepEqual(attachTool._meta?.["openai/fileParams"], ["file"], "attach_item_image must expose the ChatGPT file input");
+const fileSchema = attachTool.inputSchema?.$defs?.OpenAIFile;
+assert.deepEqual(fileSchema?.required, ["download_url", "file_id"], "ChatGPT file schema required fields are invalid");
+for (const field of ["download_url", "file_id", "mime_type", "file_name"]) assert(fileSchema?.properties?.[field], `ChatGPT file schema missing ${field}`);
 
 const code = process.env.AHA_TEST_ACCESS_CODE;
 if (code) {

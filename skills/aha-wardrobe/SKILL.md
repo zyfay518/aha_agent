@@ -16,13 +16,18 @@ Use the host agent's native vision and reasoning. Never call a separate paid vis
 ## Add an item from an image
 
 1. Inspect the user-provided image directly.
-2. Identify one main wearable item. Ignore product-page prices, thumbnails, models, and interface chrome.
-3. Infer a concise Chinese name, category, subcategory, up to two colors, and seasons.
-4. If several independent items are present or confidence is low, ask one concise question before saving.
-5. Present a compact confirmation using only three dimensions: category, seasons, and colors. Allow multiple seasons and at most two colors.
-6. After confirmation, use the host's own image-editing capability to extract only the garment and place it on a pure white catalog background. Remove people, hangers, screenshots, shop UI, prices, text, surrounding objects, and the original scene while preserving the exact garment design and colors.
-7. Call `add_wardrobe_item`, then immediately call `attach_item_image` with the processed white-background image and returned item ID. Use a host temporary HTTPS URL when available; in Codex, encode the local edited image and pass `image_base64` with its `mime_type`. These two calls form one logical save operation.
-8. Call `list_wardrobe_items` and confirm that the returned exact item has `has_image: true`. Do not say the item was saved until creation, attachment, and this verification all succeed. If image attachment fails, retry it; if it cannot be completed, delete or clearly roll back the incomplete record and report that saving did not complete.
+2. Determine whether it is a catalog-style single-item image or a try-on/on-body image containing a person and possibly several wearable items.
+3. Resolve exactly one target item:
+   - If the user explicitly identifies one visible item, such as “买了这件上衣”, use that item.
+   - If the user does not identify an item, or several items match the description, ask one concise question such as `这张图里有上衣和半身裙，你要添加哪一件？` Do not create a record yet.
+   - Process only one wardrobe item per save operation. The user may repeat the flow for another item from the same photo.
+4. Infer a concise Chinese name, category, subcategory, up to two colors, and seasons for the resolved target.
+5. For a catalog-style image, present the normal compact confirmation using category, seasons, and colors. Allow multiple seasons and at most two colors.
+6. For a try-on/on-body image, use the host's own image-editing capability to create a front-facing catalog preview of only the target item on a pure white background. Remove the person, skin, hair, hands, other garments, props, text, shop UI, and scene. Preserve the visible silhouette, neckline, sleeve length, hem, fabric, pattern, seams, logos, and colors. Reconstruct small occluded areas conservatively from visible symmetry; never invent prints, logos, pockets, fasteners, or decorations that are not supported by the source.
+7. If the target's defining structure is heavily hidden, layered under another garment, extremely small, blurred, or cut off by the image edge, do not fabricate a catalog image. Ask for a clearer try-on angle or a flat-lay/hanger photo.
+8. For a try-on/on-body image, show the processed catalog preview together with the three confirmation dimensions and ask the user to confirm. Do not save before this preview confirmation.
+9. After confirmation, call `add_wardrobe_item`, then immediately call `attach_item_image` with the confirmed processed image and returned item ID. Prefer the standard ChatGPT `file` input when the edited preview is available as a file; otherwise use a host temporary HTTPS URL. In Codex, encode the local edited image and pass `image_base64` with its `mime_type`. Never attach the original try-on photo. These two calls form one logical save operation.
+10. Call `list_wardrobe_items` and confirm that the returned exact item has `has_image: true`. Do not say the item was saved until creation, attachment, and this verification all succeed. If image attachment fails, retry it; if it cannot be completed, clearly report that saving did not complete.
 
 Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 
