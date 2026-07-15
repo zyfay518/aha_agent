@@ -38,7 +38,7 @@ Use the taxonomy in [references/taxonomy.md](references/taxonomy.md).
 
 1. Call `list_wardrobe_items` with a sufficiently high limit.
 2. Build 1–3 outfits from existing items first.
-3. Call `create_outfit_board` with the exact selected item IDs. It returns a square pure-white product collage made from the real wardrobe item images. All selected categories appear together; garments remain visually dominant while shoes and bags use realistic smaller proportions. Do not generate try-on people.
+3. Call `create_outfit_board` with the exact selected item IDs. It returns a square collage made from the real wardrobe item images on a clean, very light Morandi solid background. Tops appear above bottoms, shoes below, and bags at the sides; garments remain visually dominant while shoes and bags use realistic smaller proportions. Do not generate try-on people.
 4. Display the returned image directly inside the conversation. Do not reply with `outfit_url` when the image content is available; use the link only as a fallback when the host cannot render the returned image.
 5. Before mentioning any purchase, call `check_purchase_gap` with the categories required by the proposed outfit. If `may_suggest_purchase` is false, do not recommend buying anything and finish the outfit with owned items. If true, describe only the first returned missing category/specification; do not recommend a store or shopping link.
 

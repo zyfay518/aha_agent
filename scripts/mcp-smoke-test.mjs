@@ -43,9 +43,12 @@ if (code) {
     assert.equal(board.content[0].type, "image");
     assert.equal(board.content[0].mimeType, "image/jpeg");
     assert(!JSON.stringify(board.content).includes("http"), "outfit response should render image inline");
-    const metadata = await sharp(Buffer.from(board.content[0].data, "base64")).metadata();
+    const boardBytes = Buffer.from(board.content[0].data, "base64");
+    const metadata = await sharp(boardBytes).metadata();
     assert.equal(metadata.width, 1200, "outfit board must be square");
     assert.equal(metadata.height, 1200, "outfit board must be square");
+    const corner = await sharp(boardBytes).extract({ left: 0, top: 0, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
+    assert(corner.some((channel) => channel < 248), "outfit board should use a light Morandi background rather than pure white");
   }
 }
 

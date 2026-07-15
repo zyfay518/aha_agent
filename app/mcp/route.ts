@@ -78,7 +78,7 @@ const tools = [
   {
     name: "create_outfit_board",
     title: "生成图片穿搭板",
-    description: "Create and directly display a square 1200×1200 pure-white outfit-board image from 1–5 exact wardrobe item IDs selected by the host agent. The clean layout keeps garments visually dominant and shoes or bags proportionally smaller. Show the returned image in the conversation. Do not send outfit_url unless inline image rendering is unavailable.",
+    description: "Create and directly display a square 1200×1200 outfit-board image from 1–5 exact wardrobe item IDs selected by the host agent. It uses a clean light Morandi solid background, arranges tops above bottoms and shoes below, and places bags at the sides. Show the returned image in the conversation. Do not send outfit_url unless inline image rendering is unavailable.",
     inputSchema: { type: "object", additionalProperties: false, required: ["access_code", "item_ids"], properties: { access_code: { type: "string" }, item_ids: { type: "array", minItems: 1, maxItems: 5, items: { type: "string", format: "uuid" } }, title: { type: "string", maxLength: 40 } } },
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false, idempotentHint: true },
   },
