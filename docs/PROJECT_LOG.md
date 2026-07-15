@@ -357,3 +357,4 @@
 - `attach_item_image` 新增符合 Apps SDK 的标准 `file` 文件参数和 `openai/fileParams` 元数据，同时保留 HTTPS URL 与 Base64 兼容路径。
 - 本地契约测试通过；真实文件对象链路通过：临时单品完成新增、文件下载绑定和 `has_image=true` 回查，随后测试记录与图片已彻底清理。
 - 方案依据 OpenAI Apps SDK 当前文件参数规范：文件对象包含 `download_url`、`file_id`，并可通过 `openai/fileParams` 声明给 ChatGPT。
+- 功能提交 `be47fcf` 已部署生产；线上真实数据回归通过 7 个工具、ChatGPT 文件参数契约和原有衣橱/穿搭闭环。
